@@ -40,6 +40,33 @@ export function getSkillAbbr(name: string): string {
   return name.slice(0, 2).toUpperCase()
 }
 
+export interface SkillParameter {
+  name: string
+  type: 'string' | 'number' | 'boolean' | 'select'
+  description: string
+  required: boolean
+  default?: string | number | boolean
+  options?: string[]
+}
+
+export interface ChangelogEntry {
+  version: string
+  date: string
+  changes: string[]
+}
+
+export interface SkillDetail extends Skill {
+  longDescription: string
+  screenshots: string[]
+  changelog: ChangelogEntry[]
+  parameters: SkillParameter[]
+  compatibleSites: string[]
+  rating: number
+  reviewCount: number
+  runCount: number
+  updatedAt: string
+}
+
 export const MOCK_SKILLS: Skill[] = [
   {
     id: 'linkedin-outreach',
@@ -450,3 +477,112 @@ export const MOCK_SKILLS: Skill[] = [
     author: 'community',
   },
 ]
+
+const MOCK_SKILL_DETAILS: Record<string, Omit<SkillDetail, keyof Skill>> = {
+  'linkedin-outreach': {
+    longDescription: `Automate your LinkedIn outreach at scale without sacrificing personalization.\n\nThis skill visits prospect profiles, sends customized connection requests based on configurable templates, and queues follow-up messages after acceptance. It respects LinkedIn's daily limits and randomizes timing to mimic human behavior.\n\n**Key features:**\n- Template variables: \`{{firstName}}\`, \`{{company}}\`, \`{{title}}\`\n- Smart delay between actions (configurable)\n- Auto-withdraw pending requests older than N days\n- CSV import for prospect lists\n- Detailed delivery report with accept/ignore/pending stats`,
+    screenshots: [],
+    changelog: [
+      { version: 'v2', date: '2026-01-15', changes: ['Added follow-up message sequences', 'Template variables for company and title', 'Auto-withdraw stale requests'] },
+      { version: 'v1', date: '2025-09-20', changes: ['Initial release with connection request automation', 'CSV prospect import'] },
+    ],
+    parameters: [
+      { name: 'prospectCsv', type: 'string', description: 'Path or URL to CSV file with prospect LinkedIn URLs', required: true },
+      { name: 'connectionMessage', type: 'string', description: 'Connection request message template (supports {{variables}})', required: true, default: 'Hi {{firstName}}, I came across your profile and would love to connect!' },
+      { name: 'followUpMessage', type: 'string', description: 'Message sent after connection is accepted', required: false },
+      { name: 'dailyLimit', type: 'number', description: 'Maximum connection requests per day', required: false, default: 25 },
+      { name: 'delaySeconds', type: 'number', description: 'Random delay range (in seconds) between actions', required: false, default: 30 },
+      { name: 'withdrawAfterDays', type: 'number', description: 'Auto-withdraw pending requests after N days (0 = disabled)', required: false, default: 14 },
+    ],
+    compatibleSites: ['linkedin.com'],
+    rating: 4.7,
+    reviewCount: 128,
+    runCount: 12400,
+    updatedAt: '2026-01-15',
+  },
+  'google-maps-scraper': {
+    longDescription: `Extract structured business data from Google Maps search results.\n\nProvide a search query (e.g. "dentists in Chicago") and this skill scrolls through results, visiting each listing to capture detailed information including name, address, phone, website, hours, rating, review count, and individual reviews.\n\n**Key features:**\n- Pagination — scrapes beyond the initial result page\n- Review extraction with author, date, and text\n- Exports to CSV or JSON\n- Configurable result limit to control run time\n- Handles "More hours" and "See all reviews" expandable sections`,
+    screenshots: [],
+    changelog: [
+      { version: 'v3', date: '2026-01-08', changes: ['Added individual review extraction', 'Handle expandable hours sections', 'JSON export option'] },
+      { version: 'v2', date: '2025-10-12', changes: ['Pagination support for 100+ results', 'Improved address parsing'] },
+      { version: 'v1', date: '2025-07-01', changes: ['Initial release — basic listing extraction'] },
+    ],
+    parameters: [
+      { name: 'query', type: 'string', description: 'Search query (e.g. "plumbers in Austin, TX")', required: true },
+      { name: 'maxResults', type: 'number', description: 'Maximum number of listings to extract', required: false, default: 50 },
+      { name: 'includeReviews', type: 'boolean', description: 'Whether to extract individual reviews per listing', required: false, default: false },
+      { name: 'reviewLimit', type: 'number', description: 'Max reviews per listing (when includeReviews is true)', required: false, default: 10 },
+      { name: 'outputFormat', type: 'select', description: 'Export format', required: false, default: 'csv', options: ['csv', 'json'] },
+    ],
+    compatibleSites: ['google.com/maps', 'maps.google.com'],
+    rating: 4.8,
+    reviewCount: 256,
+    runCount: 34200,
+    updatedAt: '2026-01-08',
+  },
+  'price-monitor': {
+    longDescription: `Track product prices across major e-commerce platforms and get notified when they drop.\n\nAdd product URLs to your watchlist and this skill periodically checks prices, storing history so you can see trends over time. Set a target price to receive alerts via webhook or in-app notification.\n\n**Key features:**\n- Supports Amazon, eBay, Walmart, Best Buy, and generic product pages\n- Price history chart data\n- Target-price alerts via webhook\n- Handles currency conversion for international listings\n- Runs on a configurable schedule (hourly, daily, custom)`,
+    screenshots: [],
+    changelog: [
+      { version: 'v2', date: '2025-12-20', changes: ['Added Walmart and Best Buy support', 'Webhook notifications for price drops', 'Currency conversion'] },
+      { version: 'v1', date: '2025-08-15', changes: ['Initial release — Amazon and eBay price tracking'] },
+    ],
+    parameters: [
+      { name: 'productUrls', type: 'string', description: 'Comma-separated product URLs to monitor', required: true },
+      { name: 'targetPrice', type: 'number', description: 'Alert when price drops below this value', required: false },
+      { name: 'webhookUrl', type: 'string', description: 'Webhook URL to receive price drop notifications', required: false },
+      { name: 'checkInterval', type: 'select', description: 'How often to check prices', required: false, default: 'daily', options: ['hourly', 'daily', 'weekly'] },
+      { name: 'currency', type: 'select', description: 'Display currency for price data', required: false, default: 'USD', options: ['USD', 'EUR', 'GBP', 'JPY'] },
+    ],
+    compatibleSites: ['amazon.com', 'ebay.com', 'walmart.com', 'bestbuy.com'],
+    rating: 4.5,
+    reviewCount: 89,
+    runCount: 18700,
+    updatedAt: '2025-12-20',
+  },
+  'coupon-finder': {
+    longDescription: `Automatically find and apply the best coupon codes at checkout.\n\nWhen you reach a checkout page, this skill searches a database of known coupon codes for the retailer, tries each one, and keeps the one that gives the biggest discount. Works across thousands of online stores.\n\n**Key features:**\n- Database of 50,000+ active coupon codes\n- Tries codes automatically at checkout\n- Keeps the best discount found\n- Community-sourced code updates\n- Works on 10,000+ online retailers`,
+    screenshots: [],
+    changelog: [
+      { version: 'v3', date: '2026-02-01', changes: ['Expanded retailer coverage to 10,000+', 'Faster code testing with parallel validation', 'Community code submissions'] },
+      { version: 'v2', date: '2025-11-10', changes: ['Added support for percentage and fixed-amount coupons', 'Better checkout page detection'] },
+      { version: 'v1', date: '2025-06-01', changes: ['Initial release with 2,000 supported retailers'] },
+    ],
+    parameters: [
+      { name: 'autoApply', type: 'boolean', description: 'Automatically apply the best coupon found', required: false, default: true },
+      { name: 'notifyOnSave', type: 'boolean', description: 'Show notification when savings are found', required: false, default: true },
+      { name: 'minSavings', type: 'number', description: 'Minimum discount amount to consider (in dollars)', required: false, default: 1 },
+    ],
+    compatibleSites: ['Most e-commerce sites'],
+    rating: 4.6,
+    reviewCount: 342,
+    runCount: 89500,
+    updatedAt: '2026-02-01',
+  },
+}
+
+/** Get full skill detail — returns mock detail if available, otherwise synthesizes from base Skill */
+export function getSkillDetail(id: string): SkillDetail | null {
+  const base = MOCK_SKILLS.find((s) => s.id === id)
+  if (!base) return null
+
+  const detail = MOCK_SKILL_DETAILS[id]
+  if (detail) {
+    return { ...base, ...detail }
+  }
+
+  // Synthesize plausible defaults from the base skill
+  return {
+    ...base,
+    longDescription: base.description,
+    screenshots: [],
+    changelog: [{ version: base.version, date: '2025-09-01', changes: ['Initial release'] }],
+    parameters: [],
+    compatibleSites: [],
+    rating: 4.0 + Math.round(Math.random() * 10) / 10,
+    reviewCount: Math.max(1, Math.floor(base.installs * 0.05)),
+    runCount: base.installs * 3,
+    updatedAt: '2025-09-01',
+  }
+}

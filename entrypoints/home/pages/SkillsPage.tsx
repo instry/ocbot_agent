@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Search, ArrowRight, ChevronLeft, ChevronRight, BadgeCheck, GitFork } from 'lucide-react'
 import { MOCK_SKILLS, getSkillAbbr, type Skill } from '../data/skills'
+import { SkillDetailPage } from './SkillDetailPage'
 
 const CATEGORIES = [
   'All',
@@ -39,9 +40,12 @@ function SkillIcon({ skill, className = "h-10 w-10" }: { skill: Skill, className
   )
 }
 
-function SkillCard({ skill }: { skill: Skill }) {
+function SkillCard({ skill, onClick }: { skill: Skill; onClick: () => void }) {
   return (
-    <div className="flex cursor-pointer flex-col rounded-xl border border-border/40 bg-card p-4 shadow-sm transition-all hover:bg-accent/50 hover:shadow-md">
+    <div
+      onClick={onClick}
+      className="flex cursor-pointer flex-col rounded-xl border border-border/40 bg-card p-4 shadow-sm transition-all hover:bg-accent/50 hover:shadow-md"
+    >
       <div className="flex items-start gap-4">
         <SkillIcon skill={skill} className="h-12 w-12" />
         <div className="min-w-0 flex-1">
@@ -88,6 +92,7 @@ export function SkillsPage() {
   const [query, setQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [page, setPage] = useState(1)
+  const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
   const PAGE_SIZE = 30
 
   const filtered = useMemo(() => {
@@ -109,6 +114,10 @@ export function SkillsPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  if (selectedSkill) {
+    return <SkillDetailPage skill={selectedSkill} onBack={() => setSelectedSkill(null)} />
+  }
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-6">
@@ -163,7 +172,7 @@ export function SkillsPage() {
 
       <div className="mt-3 grid grid-cols-3 gap-4">
         {paged.map((skill) => (
-          <SkillCard key={skill.id} skill={skill} />
+          <SkillCard key={skill.id} skill={skill} onClick={() => setSelectedSkill(skill)} />
         ))}
       </div>
 
