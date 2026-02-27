@@ -26,6 +26,7 @@ function NewSessionPage() {
     <div className="flex h-full items-center justify-center">
       <div className="flex w-full max-w-2xl flex-col items-center gap-6 px-6">
         <div className="flex flex-col items-center gap-3">
+          <BotAvatar size="lg" />
           <h1 className="text-2xl font-semibold text-foreground">
             How can I help?
           </h1>

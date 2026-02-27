@@ -18,4 +18,9 @@ declare module '#imports' {
   export { InvalidMatchPattern, MatchPattern } from 'wxt/utils/match-patterns';
   export { useState, useCallback, useMemo, useEffect, useRef, useContext, useReducer } from 'react';
   export { fakeBrowser } from 'wxt/testing';
+  export { BotAvatar } from '../components/BotAvatar';
+  export { ChatArea } from '../components/ChatArea';
+  export { ChatInput } from '../components/ChatInput';
+  export { ChatList } from '../components/ChatList';
+  export { MessageBubble, ToolBatch, LiveToolStatus, ToolBatchItem, ToolBatchProps, LiveToolStatusProps } from '../components/MessageBubble';
 }
