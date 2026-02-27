@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { Send } from 'lucide-react'
 import { BotAvatar } from '@/components/BotAvatar'
 import { Sidebar } from './components/Sidebar'
+import { SkillsPage } from './pages/SkillsPage'
 
 type Page = 'new-session' | 'skills' | 'settings'
 
@@ -71,11 +72,7 @@ export function App() {
       <Sidebar activePage={page} onNavigate={setPage} />
       <main className="flex-1 overflow-hidden">
         {page === 'new-session' && <NewSessionPage />}
-        {page === 'skills' && (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            Skills — coming soon
-          </div>
-        )}
+        {page === 'skills' && <SkillsPage />}
         {page === 'settings' && (
           <div className="flex h-full items-center justify-center text-muted-foreground">
             Settings — coming soon
