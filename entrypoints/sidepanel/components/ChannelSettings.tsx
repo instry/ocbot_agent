@@ -99,20 +99,20 @@ export function ChannelSettings({ channelStatuses, onRefreshStatuses }: ChannelS
             <div className="flex items-center gap-1">
               <button
                 onClick={() => handleToggle(c)}
-                className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                 title={c.enabled ? 'Disable' : 'Enable'}
               >
-                {c.enabled ? <Power className="h-3.5 w-3.5 text-green-500" /> : <PowerOff className="h-3.5 w-3.5" />}
+                {c.enabled ? <Power className="h-3.5 w-3.5 text-green-600" /> : <PowerOff className="h-3.5 w-3.5" />}
               </button>
               <button
                 onClick={() => setEditing(c)}
-                className="rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                className="cursor-pointer rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               >
                 Edit
               </button>
               <button
                 onClick={() => handleDelete(c.id)}
-                className="rounded-md p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                className="cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -123,10 +123,10 @@ export function ChannelSettings({ channelStatuses, onRefreshStatuses }: ChannelS
 
       <button
         onClick={() => setShowForm(true)}
-        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/80 py-2.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+        className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/80 py-2.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
       >
         <Plus className="h-3.5 w-3.5" />
-        Add Telegram Bot
+        Add Telegram Channel
       </button>
     </div>
   )
@@ -211,14 +211,14 @@ function TelegramForm({ initial, onSave, onCancel }: {
       <div className="flex gap-2 pt-2">
         <button
           onClick={onCancel}
-          className="flex-1 rounded-lg border border-border/50 py-2 text-xs text-muted-foreground hover:bg-muted/80"
+          className="flex-1 cursor-pointer rounded-lg border border-border/50 py-2 text-xs text-muted-foreground hover:bg-muted/80"
         >
           Cancel
         </button>
         <button
           onClick={handleSubmit}
           disabled={saving || !botToken.trim()}
-          className="flex-1 rounded-lg bg-primary py-2 text-xs font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
+          className="flex-1 cursor-pointer rounded-lg bg-primary py-2 text-xs font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
         >
           {saving ? 'Saving...' : initial ? 'Update' : 'Add Channel'}
         </button>

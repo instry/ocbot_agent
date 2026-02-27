@@ -81,7 +81,7 @@ export function ChatArea({ hasProvider, onOpenSettings, messages, streamingText,
               </div>
               <button
                 onClick={onOpenSettings}
-                className="mt-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+                className="mt-2 cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80"
               >
                 Go to Settings
               </button>

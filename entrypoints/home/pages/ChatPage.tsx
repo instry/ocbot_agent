@@ -34,7 +34,7 @@ export function ChatPage() {
       <div className="flex items-center gap-1 border-b border-border/40 px-3 py-2">
         <button
           onClick={() => setShowChatList(true)}
-          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+          className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
           title="Chat list"
         >
           <PanelLeft className="h-4 w-4" />
@@ -42,7 +42,7 @@ export function ChatPage() {
         <div className="flex-1" />
         <button
           onClick={newChat}
-          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+          className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
           title="New chat"
         >
           <SquarePen className="h-4 w-4" />

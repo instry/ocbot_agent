@@ -32,7 +32,7 @@ export function Settings({ providers, selectedProvider, onSaveProvider, onDelete
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
-        <button onClick={view === 'list' ? onBack : () => setView('list')} className="rounded-lg p-1 text-muted-foreground hover:bg-muted/80 hover:text-foreground">
+        <button onClick={view === 'list' ? onBack : () => setView('list')} className="cursor-pointer rounded-lg p-1 text-muted-foreground hover:bg-muted/80 hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <h2 className="text-sm font-semibold">{headerTitle}</h2>
@@ -43,7 +43,7 @@ export function Settings({ providers, selectedProvider, onSaveProvider, onDelete
         <div className="flex border-b border-border/40">
           <button
             onClick={() => setTab('providers')}
-            className={`flex-1 py-2 text-xs font-medium transition-colors ${
+            className={`flex-1 cursor-pointer py-2 text-xs font-medium transition-colors ${
               tab === 'providers' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -51,7 +51,7 @@ export function Settings({ providers, selectedProvider, onSaveProvider, onDelete
           </button>
           <button
             onClick={() => setTab('channels')}
-            className={`flex-1 py-2 text-xs font-medium transition-colors ${
+            className={`flex-1 cursor-pointer py-2 text-xs font-medium transition-colors ${
               tab === 'channels' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -139,20 +139,20 @@ function ProviderList({ providers, selectedProvider, onAdd, onEdit, onDelete, on
                 {!isDefault && (
                   <button
                     onClick={() => onSelect(p.id)}
-                    className="rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    className="cursor-pointer rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   >
                     Set default
                   </button>
                 )}
                 <button
                   onClick={() => onEdit(p)}
-                  className="rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  className="cursor-pointer rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 >
                   Edit
                 </button>
                 <button
                   onClick={() => onDelete(p.id)}
-                  className="rounded-md p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  className="cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -164,7 +164,7 @@ function ProviderList({ providers, selectedProvider, onAdd, onEdit, onDelete, on
 
       <button
         onClick={onAdd}
-        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/80 py-2.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+        className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/80 py-2.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
       >
         <Plus className="h-3.5 w-3.5" />
         Add Provider
@@ -231,7 +231,7 @@ function ProviderForm({ initial, onSave, onCancel }: {
               <button
                 key={t.type}
                 onClick={() => handleTypeChange(t.type)}
-                className={`rounded-lg border px-2 py-1.5 text-[11px] transition-colors ${
+                className={`cursor-pointer rounded-lg border px-2 py-1.5 text-[11px] transition-colors ${
                   providerType === t.type
                     ? 'border-primary bg-primary/10 font-medium text-primary'
                     : 'border-border/50 hover:border-border'
@@ -301,7 +301,7 @@ function ProviderForm({ initial, onSave, onCancel }: {
               <button
                 key={m.id}
                 onClick={() => setModelId(m.id)}
-                className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                className={`flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
                   modelId === m.id
                     ? 'border-primary bg-primary/10 font-medium text-primary'
                     : 'border-border/50 hover:border-border'
@@ -327,14 +327,14 @@ function ProviderForm({ initial, onSave, onCancel }: {
       <div className="flex gap-2 pt-2">
         <button
           onClick={onCancel}
-          className="flex-1 rounded-lg border border-border/50 py-2 text-xs text-muted-foreground hover:bg-muted/80"
+          className="flex-1 cursor-pointer rounded-lg border border-border/50 py-2 text-xs text-muted-foreground hover:bg-muted/80"
         >
           Cancel
         </button>
         <button
           onClick={handleSubmit}
           disabled={saving || (!apiKey.trim() && providerType !== 'openai-compatible')}
-          className="flex-1 rounded-lg bg-primary py-2 text-xs font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
+          className="flex-1 cursor-pointer rounded-lg bg-primary py-2 text-xs font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
         >
           {saving ? 'Saving...' : initial ? 'Update' : 'Add Provider'}
         </button>

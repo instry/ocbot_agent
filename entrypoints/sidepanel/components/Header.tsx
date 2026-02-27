@@ -53,7 +53,9 @@ export function Header({ selectedProvider, providers, onSelectProvider, onOpenSe
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => providers.length > 0 && setDropdownOpen(!dropdownOpen)}
-          className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm transition-colors hover:bg-muted/80"
+          className={`flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm transition-colors hover:bg-muted/80 ${
+            providers.length > 0 ? 'cursor-pointer' : ''
+          }`}
         >
           {selectedProvider ? (
             <>
@@ -69,11 +71,14 @@ export function Header({ selectedProvider, providers, onSelectProvider, onOpenSe
 
         {dropdownOpen && providers.length > 0 && (
           <div className="absolute left-0 top-full z-50 mt-1 min-w-[200px] rounded-lg border border-border bg-popover p-1 shadow-lg">
-            {providers.map(p => (
+            {providers.map((p) => (
               <button
                 key={p.id}
-                onClick={() => { onSelectProvider(p.id); setDropdownOpen(false) }}
-                className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent ${
+                onClick={() => {
+                  onSelectProvider(p.id)
+                  setDropdownOpen(false)
+                }}
+                className={`flex w-full cursor-pointer items-center justify-between rounded-md px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent ${
                   p.id === selectedProvider?.id ? 'bg-accent/50 font-medium' : ''
                 }`}
               >
@@ -88,27 +93,29 @@ export function Header({ selectedProvider, providers, onSelectProvider, onOpenSe
       <div className="flex items-center gap-0.5">
         <button
           onClick={onOpenChatList}
-          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+          className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
           title="Chat list"
         >
           <PanelLeft className="h-4 w-4" />
         </button>
         <button
           onClick={onNewChat}
-          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
-          title="New chat"
+          className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+          title="New Chat"
         >
           <SquarePen className="h-4 w-4" />
         </button>
         <button
           onClick={onOpenSettings}
-          className="relative rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+          className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
           title="Settings"
         >
-          <Settings className="h-4 w-4" />
-          {statusDotColor && (
-            <span className={`absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ${statusDotColor}`} />
-          )}
+          <div className="relative">
+            <Settings className="h-4 w-4" />
+            {statusDotColor && (
+              <span className={`absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-background ${statusDotColor}`} />
+            )}
+          </div>
         </button>
       </div>
     </header>

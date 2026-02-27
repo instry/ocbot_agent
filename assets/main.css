@@ -91,4 +91,23 @@
   body {
     @apply bg-background text-foreground;
   }
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Slim scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.7 0 0 / 0.3);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.7 0 0 / 0.5);
+  }
 }

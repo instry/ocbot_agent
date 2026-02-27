@@ -95,7 +95,7 @@ export function ToolBatch({ tools, isComplete }: ToolBatchProps) {
     <div className="px-3 py-1">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted/60 transition-colors"
+        className="flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/60"
       >
         {isComplete ? (
           <CheckCircle2 className="h-3 w-3 text-green-500" />

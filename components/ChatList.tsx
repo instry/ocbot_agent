@@ -136,7 +136,7 @@ function ChatItem({
       <div className="relative shrink-0" ref={menuRef}>
         <button
           onClick={e => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
-          className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
+          className="cursor-pointer rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
         >
           <MoreHorizontal className="h-4 w-4" />
         </button>
@@ -149,7 +149,7 @@ function ChatItem({
                 onPin()
                 setMenuOpen(false)
               }}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent"
             >
               {conv.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
               {conv.pinned ? 'Unpin' : 'Pin'}
@@ -161,7 +161,7 @@ function ChatItem({
                 setIsRenaming(true)
                 setMenuOpen(false)
               }}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent"
             >
               <Pencil className="h-3.5 w-3.5" />
               Rename
@@ -172,7 +172,7 @@ function ChatItem({
                 onDelete()
                 setMenuOpen(false)
               }}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
+              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
             >
               <Trash2 className="h-3.5 w-3.5" />
               Delete
