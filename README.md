@@ -2,6 +2,8 @@
 
 `ocbot_agent` is the core AI extension component of the ocbot project, running as a Chrome Extension. It provides an interactive interface via the Side Panel and leverages low-level browser APIs to achieve automation.
 
+This project is included as a **git submodule** in both [ocbot](https://github.com/instry/ocbot) and [ocbot_biz](https://github.com/instry/ocbot_biz). You typically don't need to clone it separately — use `git clone --recursive` on the parent project instead.
+
 ## ✨ Key Features
 
 *   **Multi-Model Support**: Built-in support for major LLMs such as OpenAI, Anthropic, Gemini, DeepSeek, Moonshot, and more.
