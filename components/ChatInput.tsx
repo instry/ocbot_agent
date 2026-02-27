@@ -1,6 +1,6 @@
 import { Send, Square } from 'lucide-react'
 import { useState, useCallback } from 'react'
-import { useInputHistory } from '../hooks/useInputHistory'
+import { useInputHistory } from '@/lib/hooks/useInputHistory'
 
 interface ChatInputProps {
   onSend: (text: string) => void

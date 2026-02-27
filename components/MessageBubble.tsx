@@ -1,8 +1,8 @@
-import type { ChatMessage } from '../../../lib/types'
+import type { ChatMessage } from '@/lib/types'
 import { useState } from 'react'
 import { ChevronDown, Loader2, CheckCircle2 } from 'lucide-react'
-import { BotAvatar } from './BotAvatar'
-import type { ToolStatus } from '../hooks/useChat'
+import { BotAvatar } from '@/components/BotAvatar'
+import type { ToolStatus } from '@/lib/hooks/useChat'
 
 interface MessageBubbleProps {
   message: ChatMessage

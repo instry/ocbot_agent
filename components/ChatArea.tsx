@@ -1,9 +1,9 @@
 import { Settings } from 'lucide-react'
 import { useEffect, useRef, useMemo } from 'react'
-import type { ChatMessage } from '../../../lib/types'
-import type { ToolStatus as ToolStatusType } from '../hooks/useChat'
-import { MessageBubble, LiveToolStatus, ToolBatch } from './MessageBubble'
-import { BotAvatar } from './BotAvatar'
+import type { ChatMessage } from '@/lib/types'
+import type { ToolStatus as ToolStatusType } from '@/lib/hooks/useChat'
+import { MessageBubble, LiveToolStatus, ToolBatch } from '@/components/MessageBubble'
+import { BotAvatar } from '@/components/BotAvatar'
 
 interface ChatAreaProps {
   hasProvider: boolean

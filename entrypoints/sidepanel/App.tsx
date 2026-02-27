@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ChatArea } from './components/ChatArea'
-import { ChatInput } from './components/ChatInput'
-import { ChatList } from './components/ChatList'
+import { ChatArea } from '@/components/ChatArea'
+import { ChatInput } from '@/components/ChatInput'
+import { ChatList } from '@/components/ChatList'
 import { Header } from './components/Header'
 import { Settings } from './components/Settings'
-import { useLlmProvider } from '../../lib/llm/useLlmProvider'
-import { useChat } from './hooks/useChat'
-import type { ChannelStatus } from '../../lib/channels/types'
+import { useLlmProvider } from '@/lib/llm/useLlmProvider'
+import { useChat } from '@/lib/hooks/useChat'
+import type { ChannelStatus } from '@/lib/channels/types'
 
 type View = 'chat' | 'chatList' | 'settings'
 

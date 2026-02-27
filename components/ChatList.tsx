@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { MoreHorizontal, Pin, PinOff, Pencil, Trash2, ArrowLeft } from 'lucide-react'
-import type { Conversation } from '../../../lib/types'
+import type { Conversation } from '@/lib/types'
 
 interface ChatListProps {
   conversations: Conversation[]

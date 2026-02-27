@@ -1,0 +1,68 @@
+import { ChatArea } from '@/components/ChatArea'
+import { ChatInput } from '@/components/ChatInput'
+import { ChatList } from '@/components/ChatList'
+import { useChat } from '@/lib/hooks/useChat'
+import { useLlmProvider } from '@/lib/llm/useLlmProvider'
+import { useState } from 'react'
+import { PanelLeft, SquarePen } from 'lucide-react'
+
+export function ChatPage() {
+  const { providers, selectedProvider, selectProvider } = useLlmProvider()
+  const {
+    messages, conversationId, conversations, streamingText, isLoading,
+    toolStatuses, error, sendMessage, stopAgent, newChat,
+    loadConversation, updateConversation, removeConversation,
+  } = useChat(selectedProvider)
+  const [showChatList, setShowChatList] = useState(false)
+
+  if (showChatList) {
+    return (
+      <ChatList
+        conversations={conversations}
+        activeConversationId={conversationId}
+        onSelectChat={(id) => { loadConversation(id); setShowChatList(false) }}
+        onPinChat={(id, pinned) => updateConversation(id, { pinned })}
+        onRenameChat={(id, title) => updateConversation(id, { title })}
+        onDeleteChat={removeConversation}
+        onClose={() => setShowChatList(false)}
+      />
+    )
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-1 border-b border-border/40 px-3 py-2">
+        <button
+          onClick={() => setShowChatList(true)}
+          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+          title="Chat list"
+        >
+          <PanelLeft className="h-4 w-4" />
+        </button>
+        <div className="flex-1" />
+        <button
+          onClick={newChat}
+          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+          title="New chat"
+        >
+          <SquarePen className="h-4 w-4" />
+        </button>
+      </div>
+      <ChatArea
+        hasProvider={!!selectedProvider}
+        onOpenSettings={() => {/* TODO: navigate to settings page */}}
+        messages={messages}
+        streamingText={streamingText}
+        isLoading={isLoading}
+        toolStatuses={toolStatuses}
+        error={error}
+      />
+      <ChatInput
+        onSend={sendMessage}
+        onStop={stopAgent}
+        isLoading={isLoading}
+        disabled={!selectedProvider}
+      />
+    </div>
+  )
+}
