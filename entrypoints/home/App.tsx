@@ -8,10 +8,13 @@ type Page = 'new-session' | 'skills' | 'settings'
 function NewSessionPage() {
   const [input, setInput] = useState('')
 
-  const handleSubmit = useCallback((e?: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
     e?.preventDefault()
     if (!input.trim()) return
-    // TODO: create session and send message
+    await chrome.storage.local.set({ ocbot_pending_message: input.trim() })
+    // Must call open() directly from extension page to retain user gesture context
+    const { id: windowId } = await chrome.windows.getCurrent()
+    await chrome.sidePanel.open({ windowId: windowId! })
     setInput('')
   }, [input])
 

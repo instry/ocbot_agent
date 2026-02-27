@@ -11,7 +11,7 @@ export default defineBackground(() => {
   })
 
   // Handle messages from sidepanel
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message?.type) return false
 
     switch (message.type) {
@@ -33,6 +33,17 @@ export default defineBackground(() => {
       case 'getChannelStatuses': {
         sendResponse({ ok: true, statuses: getAllStatuses() })
         return false
+      }
+
+      case 'openSidePanel': {
+        const windowIdPromise = sender.tab?.windowId
+          ? Promise.resolve(sender.tab.windowId)
+          : chrome.windows.getLastFocused().then(w => w.id)
+        windowIdPromise
+          .then(windowId => chrome.sidePanel.open({ windowId }))
+          .then(() => sendResponse({ ok: true }))
+          .catch(err => sendResponse({ ok: false, error: String(err) }))
+        return true
       }
     }
 

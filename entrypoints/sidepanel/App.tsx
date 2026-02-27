@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { ChatArea } from '@/components/ChatArea'
 import { ChatInput } from '@/components/ChatInput'
 import { ChatList } from '@/components/ChatList'
@@ -19,6 +19,42 @@ export function App() {
     loadConversation, updateConversation, removeConversation,
   } = useChat(selectedProvider)
   const [channelStatuses, setChannelStatuses] = useState<Record<string, ChannelStatus>>({})
+  const pendingMessageRef = useRef<string | null>(null)
+
+  // Process pending message once provider is ready
+  useEffect(() => {
+    if (pendingMessageRef.current && selectedProvider && !isLoading) {
+      const text = pendingMessageRef.current
+      pendingMessageRef.current = null
+      sendMessage(text)
+    }
+  }, [selectedProvider, isLoading, sendMessage])
+
+  // Pick up pending message from home page (on mount)
+  useEffect(() => {
+    chrome.storage.local.get('ocbot_pending_message').then(result => {
+      const text = result.ocbot_pending_message
+      if (text && typeof text === 'string') {
+        chrome.storage.local.remove('ocbot_pending_message')
+        newChat()
+        pendingMessageRef.current = text
+      }
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pick up pending message when side panel is already open
+  useEffect(() => {
+    const listener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if (changes.ocbot_pending_message?.newValue) {
+        const text = changes.ocbot_pending_message.newValue
+        chrome.storage.local.remove('ocbot_pending_message')
+        newChat()
+        pendingMessageRef.current = text
+      }
+    }
+    chrome.storage.local.onChanged.addListener(listener)
+    return () => chrome.storage.local.onChanged.removeListener(listener)
+  }, [newChat])
 
   const refreshChannelStatuses = useCallback(() => {
     chrome.runtime.sendMessage({ type: 'getChannelStatuses' }, (resp) => {
