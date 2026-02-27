@@ -7,9 +7,10 @@ interface ChatInputProps {
   onStop: () => void
   isLoading: boolean
   disabled: boolean
+  variant?: 'footer' | 'centered'
 }
 
-export function ChatInput({ onSend, onStop, isLoading, disabled }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, isLoading, disabled, variant = 'footer' }: ChatInputProps) {
   const [input, setInput] = useState('')
   const { navigateUp, navigateDown, resetNavigation, addEntry } = useInputHistory()
 
@@ -67,8 +68,12 @@ export function ChatInput({ onSend, onStop, isLoading, disabled }: ChatInputProp
     resetNavigation()
   }, [resetNavigation])
 
+  const containerClasses = variant === 'footer'
+    ? "border-t border-border/40 bg-background/80 p-3 backdrop-blur-md"
+    : "w-full max-w-2xl rounded-xl border border-border/40 bg-background p-4 shadow-sm"
+
   return (
-    <footer className="border-t border-border/40 bg-background/80 p-3 backdrop-blur-md">
+    <div className={containerClasses}>
       <form onSubmit={handleSubmit} className="relative flex w-full items-end gap-2">
         <textarea
           className="max-h-32 min-h-[42px] flex-1 resize-none rounded-2xl border border-border/50 bg-muted/50 px-4 py-2.5 pr-11 text-sm outline-none transition-colors placeholder:text-muted-foreground/70 hover:border-border focus:border-primary"
@@ -98,6 +103,6 @@ export function ChatInput({ onSend, onStop, isLoading, disabled }: ChatInputProp
           </button>
         )}
       </form>
-    </footer>
+    </div>
   )
 }

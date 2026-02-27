@@ -48,21 +48,38 @@ export function ChatPage() {
           <SquarePen className="h-4 w-4" />
         </button>
       </div>
-      <ChatArea
-        hasProvider={!!selectedProvider}
-        onOpenSettings={() => {/* TODO: navigate to settings page */}}
-        messages={messages}
-        streamingText={streamingText}
-        isLoading={isLoading}
-        toolStatuses={toolStatuses}
-        error={error}
-      />
-      <ChatInput
-        onSend={sendMessage}
-        onStop={stopAgent}
-        isLoading={isLoading}
-        disabled={!selectedProvider}
-      />
+      
+      {messages.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center p-4">
+          <h1 className="mb-8 text-2xl font-semibold text-foreground">What can I help you with?</h1>
+          <ChatInput
+            variant="centered"
+            onSend={sendMessage}
+            onStop={stopAgent}
+            isLoading={isLoading}
+            disabled={!selectedProvider}
+          />
+        </div>
+      ) : (
+        <>
+          <ChatArea
+            hasProvider={!!selectedProvider}
+            onOpenSettings={() => {/* TODO: navigate to settings page */}}
+            messages={messages}
+            streamingText={streamingText}
+            isLoading={isLoading}
+            toolStatuses={toolStatuses}
+            error={error}
+          />
+          <ChatInput
+            variant="footer"
+            onSend={sendMessage}
+            onStop={stopAgent}
+            isLoading={isLoading}
+            disabled={!selectedProvider}
+          />
+        </>
+      )}
     </div>
   )
 }

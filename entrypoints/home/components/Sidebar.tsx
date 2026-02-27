@@ -1,14 +1,14 @@
-import { MessageSquare, Puzzle, Settings } from 'lucide-react'
+import { SquarePen, Puzzle, Settings } from 'lucide-react'
 
-type Page = 'chat' | 'skills' | 'settings'
+type Page = 'new-session' | 'skills' | 'settings'
 
 interface SidebarProps {
   activePage: Page
   onNavigate: (page: Page) => void
 }
 
-const navItems: { id: Page; label: string; icon: typeof MessageSquare }[] = [
-  { id: 'chat', label: 'Chat', icon: MessageSquare },
+const navItems: { id: Page; label: string; icon: typeof SquarePen }[] = [
+  { id: 'new-session', label: 'New Session', icon: SquarePen },
   { id: 'skills', label: 'Skills', icon: Puzzle },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
@@ -16,12 +16,7 @@ const navItems: { id: Page; label: string; icon: typeof MessageSquare }[] = [
 export function Sidebar({ activePage, onNavigate }: SidebarProps) {
   return (
     <aside className="flex h-full w-56 flex-col border-r border-border/40 bg-muted/30">
-      <div className="flex items-center gap-2 px-4 py-4">
-        <img src="/icon/icon32.png" alt="ocbot" className="h-6 w-6" />
-        <span className="text-base font-semibold">ocbot</span>
-      </div>
-
-      <nav className="flex-1 space-y-0.5 px-2">
+      <nav className="flex-1 space-y-0.5 px-2 pt-3">
         {navItems.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
