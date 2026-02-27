@@ -38,18 +38,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     return null
   }
 
-  // assistant message with only tool calls (no text) — render as tool batch
+  // Tool-only assistant messages are grouped and rendered by ChatArea
   if (message.role === 'assistant' && message.toolCalls?.length && !message.content) {
-    return (
-      <ToolBatch
-        tools={message.toolCalls.map(tc => ({
-          id: tc.id,
-          name: tc.name,
-          status: 'done' as const,
-        }))}
-        isComplete={true}
-      />
-    )
+    return null
   }
 
   // assistant text message
@@ -85,18 +76,18 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
 // --- Collapsible Tool Batch ---
 
-interface ToolBatchItem {
+export interface ToolBatchItem {
   id: string
   name: string
   status: 'running' | 'done'
 }
 
-interface ToolBatchProps {
+export interface ToolBatchProps {
   tools: ToolBatchItem[]
   isComplete: boolean
 }
 
-function ToolBatch({ tools, isComplete }: ToolBatchProps) {
+export function ToolBatch({ tools, isComplete }: ToolBatchProps) {
   const [isOpen, setIsOpen] = useState(false)
   const completedCount = tools.filter(t => t.status === 'done').length
 

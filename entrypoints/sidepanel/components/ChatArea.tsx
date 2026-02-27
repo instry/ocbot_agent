@@ -1,8 +1,8 @@
 import { Settings } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import type { ChatMessage } from '../../../lib/types'
 import type { ToolStatus as ToolStatusType } from '../hooks/useChat'
-import { MessageBubble, LiveToolStatus } from './MessageBubble'
+import { MessageBubble, LiveToolStatus, ToolBatch } from './MessageBubble'
 import { BotAvatar } from './BotAvatar'
 
 interface ChatAreaProps {
@@ -21,6 +21,35 @@ export function ChatArea({ hasProvider, onOpenSettings, messages, streamingText,
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingText, toolStatuses])
+
+  // Group consecutive tool-only assistant messages into a single batch for display.
+  // This prevents showing "1/1" for each turn — instead shows "n/n" consolidated.
+  type RenderItem =
+    | { type: 'message'; msg: ChatMessage }
+    | { type: 'toolGroup'; id: string; tools: { id: string; name: string; status: 'done' }[] }
+
+  const renderItems = useMemo(() => {
+    const items: RenderItem[] = []
+    for (const msg of messages) {
+      if (msg.role === 'tool') continue // tool results are hidden in UI
+      if (msg.role === 'assistant' && msg.toolCalls?.length && !msg.content) {
+        // Tool-only assistant message — merge into previous group or start new one
+        const last = items[items.length - 1]
+        if (last?.type === 'toolGroup') {
+          last.tools.push(...msg.toolCalls.map(tc => ({ id: tc.id, name: tc.name, status: 'done' as const })))
+        } else {
+          items.push({
+            type: 'toolGroup',
+            id: msg.id,
+            tools: msg.toolCalls.map(tc => ({ id: tc.id, name: tc.name, status: 'done' as const })),
+          })
+        }
+      } else {
+        items.push({ type: 'message', msg })
+      }
+    }
+    return items
+  }, [messages])
 
   // Empty state
   if (messages.length === 0) {
@@ -65,9 +94,14 @@ export function ChatArea({ hasProvider, onOpenSettings, messages, streamingText,
 
   return (
     <main className="flex-1 overflow-y-auto py-2">
-      {messages.map(msg => (
-        <MessageBubble key={msg.id} message={msg} />
-      ))}
+      {renderItems.map(item => {
+        if (item.type === 'toolGroup') {
+          // During loading, hide grouped batches — LiveToolStatus handles progress
+          if (isLoading) return null
+          return <ToolBatch key={item.id} tools={item.tools} isComplete={true} />
+        }
+        return <MessageBubble key={item.msg.id} message={item.msg} />
+      })}
 
       {/* Live tool execution status */}
       {isLoading && toolStatuses.length > 0 && !streamingText && (
