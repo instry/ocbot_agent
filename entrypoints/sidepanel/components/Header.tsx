@@ -1,4 +1,4 @@
-import { Settings, ChevronDown, SquarePen } from 'lucide-react'
+import { Settings, ChevronDown, SquarePen, PanelLeft } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import type { LlmProvider } from '../../../lib/llm/types'
 import type { ChannelStatus } from '../../../lib/channels/types'
@@ -10,10 +10,11 @@ interface HeaderProps {
   onSelectProvider: (id: string) => void
   onOpenSettings: () => void
   onNewChat: () => void
+  onOpenChatList: () => void
   channelStatuses: Record<string, ChannelStatus>
 }
 
-export function Header({ selectedProvider, providers, onSelectProvider, onOpenSettings, onNewChat, channelStatuses }: HeaderProps) {
+export function Header({ selectedProvider, providers, onSelectProvider, onOpenSettings, onNewChat, onOpenChatList, channelStatuses }: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -85,6 +86,13 @@ export function Header({ selectedProvider, providers, onSelectProvider, onOpenSe
       </div>
 
       <div className="flex items-center gap-0.5">
+        <button
+          onClick={onOpenChatList}
+          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+          title="Chat list"
+        >
+          <PanelLeft className="h-4 w-4" />
+        </button>
         <button
           onClick={onNewChat}
           className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"

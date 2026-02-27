@@ -25,4 +25,6 @@ export interface Conversation {
   messages: ChatMessage[]
   createdAt: number
   updatedAt: number
+  title?: string
+  pinned?: boolean
 }

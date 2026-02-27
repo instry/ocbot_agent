@@ -1,10 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { ChatMessage } from '@/lib/types'
+import type { ChatMessage, Conversation } from '@/lib/types'
 import type { LlmProvider, LlmRequestMessage } from '@/lib/llm/types'
 import { runAgentLoop } from '@/lib/agent/loop'
 import { ActCache } from '@/lib/agent/cache'
 import { AgentCache } from '@/lib/agent/agentCache'
-import { saveConversation, getConversations } from '@/lib/storage'
+import { saveConversation, getConversations, deleteConversation } from '@/lib/storage'
 
 export interface ToolStatus {
   id: string
@@ -16,22 +16,40 @@ export interface ToolStatus {
 const actCache = new ActCache()
 const agentCacheInstance = new AgentCache()
 
+function generateTitle(messages: ChatMessage[]): string {
+  const firstUserMsg = messages.find(m => m.role === 'user')
+  if (!firstUserMsg) return 'New Chat'
+  const text = firstUserMsg.content.trim()
+  return text.length > 30 ? text.slice(0, 30) + '…' : text
+}
+
 export function useChat(provider: LlmProvider | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [conversationId, setConversationId] = useState(() => `conv_${Date.now()}`)
+  const [conversations, setConversations] = useState<Conversation[]>([])
   const [streamingText, setStreamingText] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [toolStatuses, setToolStatuses] = useState<ToolStatus[]>([])
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // Track the current conversation's title/pinned for saving
+  const convMetaRef = useRef<{ title?: string; pinned?: boolean }>({})
+
+  const refreshConversations = useCallback(async () => {
+    const convs = await getConversations()
+    setConversations(convs)
+    return convs
+  }, [])
 
   // Load most recent conversation on mount
   useEffect(() => {
     getConversations().then(convs => {
+      setConversations(convs)
       if (convs.length > 0) {
         const latest = convs[0]
         setConversationId(latest.id)
         setMessages(latest.messages)
+        convMetaRef.current = { title: latest.title, pinned: latest.pinned }
       }
     })
   }, [])
@@ -39,13 +57,62 @@ export function useChat(provider: LlmProvider | null) {
   // Auto-save conversation when messages change
   useEffect(() => {
     if (messages.length === 0) return
-    saveConversation({
+    const title = convMetaRef.current.title || generateTitle(messages)
+    const conv: Conversation = {
       id: conversationId,
       messages,
       createdAt: messages[0].createdAt,
       updatedAt: Date.now(),
-    })
-  }, [messages, conversationId])
+      title,
+      pinned: convMetaRef.current.pinned,
+    }
+    saveConversation(conv).then(() => refreshConversations())
+  }, [messages, conversationId, refreshConversations])
+
+  const loadConversation = useCallback((id: string) => {
+    const conv = conversations.find(c => c.id === id)
+    if (!conv) return
+    setConversationId(conv.id)
+    setMessages(conv.messages)
+    convMetaRef.current = { title: conv.title, pinned: conv.pinned }
+    setStreamingText('')
+    setToolStatuses([])
+    setError(null)
+  }, [conversations])
+
+  const updateConversation = useCallback(async (id: string, partial: { title?: string; pinned?: boolean }) => {
+    const convs = await getConversations()
+    const conv = convs.find(c => c.id === id)
+    if (!conv) return
+    const updated = { ...conv, ...partial, updatedAt: Date.now() }
+    await saveConversation(updated)
+    // If updating the active conversation, sync meta ref
+    if (id === conversationId) {
+      convMetaRef.current = { title: updated.title, pinned: updated.pinned }
+    }
+    await refreshConversations()
+  }, [conversationId, refreshConversations])
+
+  const removeConversation = useCallback(async (id: string) => {
+    await deleteConversation(id)
+    const convs = await refreshConversations()
+    if (id === conversationId) {
+      // Switch to next conversation or start fresh
+      if (convs.length > 0) {
+        const next = convs[0]
+        setConversationId(next.id)
+        setMessages(next.messages)
+        convMetaRef.current = { title: next.title, pinned: next.pinned }
+      } else {
+        setMessages([])
+        setConversationId(`conv_${Date.now()}`)
+        convMetaRef.current = {}
+      }
+      setStreamingText('')
+      setToolStatuses([])
+      setError(null)
+    }
+  }, [conversationId, refreshConversations])
 
   const sendMessage = useCallback(async (text: string) => {
     if (!provider || !text.trim() || isLoading) return
@@ -166,6 +233,7 @@ export function useChat(provider: LlmProvider | null) {
   const newChat = useCallback(() => {
     setMessages([])
     setConversationId(`conv_${Date.now()}`)
+    convMetaRef.current = {}
     setStreamingText('')
     setToolStatuses([])
     setError(null)
@@ -173,6 +241,8 @@ export function useChat(provider: LlmProvider | null) {
 
   return {
     messages,
+    conversationId,
+    conversations,
     streamingText,
     isLoading,
     toolStatuses,
@@ -180,5 +250,8 @@ export function useChat(provider: LlmProvider | null) {
     sendMessage,
     stopAgent,
     newChat,
+    loadConversation,
+    updateConversation,
+    removeConversation,
   }
 }
