@@ -94,6 +94,8 @@ export async function runAgentLoop(
   // --- Normal LLM loop ---
   const allMessages: LlmRequestMessage[] = [systemMessage, ...messages]
   const recordedSteps: AgentReplayStep[] = []
+  // Global tool call counter — ensures unique IDs across all turns
+  let globalToolCallIndex = 0
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     if (signal?.aborted) return
@@ -101,8 +103,6 @@ export async function runAgentLoop(
     let textContent = ''
     let reasoningContent = ''
     const toolCalls: Map<string, { id: string; name: string; arguments: string }> = new Map()
-    // Track tool calls by index for OpenAI streaming (where id comes only on first chunk)
-    let currentToolCallIndex = 0
 
     try {
       for await (const event of streamChat(provider, allMessages, BROWSER_TOOLS, signal)) {
@@ -119,10 +119,10 @@ export async function runAgentLoop(
             break
 
           case 'tool_call_start': {
-            const id = event.id || `tc_${currentToolCallIndex}`
+            const id = event.id || `tc_${globalToolCallIndex}`
             toolCalls.set(id, { id, name: event.name, arguments: '' })
             callbacks.onToolCallStart(id, event.name)
-            currentToolCallIndex++
+            globalToolCallIndex++
             break
           }
 

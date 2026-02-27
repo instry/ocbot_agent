@@ -103,7 +103,7 @@ export function ToolBatch({ tools, isComplete }: ToolBatchProps) {
           <Loader2 className="h-3 w-3 animate-spin text-primary" />
         )}
         <span>
-          {completedCount}/{tools.length} actions completed
+          {tools.length} actions completed
         </span>
         <ChevronDown className={`h-3 w-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -138,6 +138,7 @@ export function LiveToolStatus({ statuses }: LiveToolStatusProps) {
   const completedCount = statuses.filter(t => t.status === 'done').length
   const allDone = completedCount === statuses.length
   const currentTool = statuses.find(t => t.status === 'running')
+  const currentStep = completedCount + (currentTool ? 1 : 0)
 
   return (
     <div className="px-3 py-1">
@@ -149,8 +150,8 @@ export function LiveToolStatus({ statuses }: LiveToolStatusProps) {
         )}
         <span>
           {currentTool
-            ? formatToolName(currentTool.name) + '...'
-            : `${completedCount}/${statuses.length} actions completed`
+            ? `Step ${currentStep}: ${formatToolName(currentTool.name)}...`
+            : `${completedCount} actions completed`
           }
         </span>
       </div>
