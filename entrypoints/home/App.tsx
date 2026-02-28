@@ -8,6 +8,7 @@ import { Sidebar } from './components/Sidebar'
 import { SkillsPage } from './pages/SkillsPage'
 import { AboutPage } from './pages/AboutPage'
 import { useLlmProvider } from '@/lib/llm/useLlmProvider'
+import { useSettings } from '@/lib/hooks/useSettings'
 import type { LlmProvider } from '@/lib/llm/types'
 import type { ChannelStatus } from '@/lib/channels/types'
 
@@ -52,7 +53,6 @@ function NewSessionPage({
           providers={providers}
           selectedProvider={selectedProvider}
           onSelectProvider={selectProvider}
-          onConfigureLlm={() => onNavigate('settings')}
         />
         <div className="flex flex-wrap justify-center gap-2">
           {SUGGESTION_CHIPS.map((chip) => (
@@ -77,6 +77,7 @@ export function App() {
     return 'new-session'
   })
   const { providers, selectedProvider, saveProvider, deleteProvider, selectProvider } = useLlmProvider()
+  const { colorScheme, language, setColorScheme, setLanguage } = useSettings()
   const [channelStatuses, setChannelStatuses] = useState<Record<string, ChannelStatus>>({})
 
   const refreshChannelStatuses = useCallback(() => {
@@ -145,7 +146,10 @@ export function App() {
             onSaveProvider={saveProvider}
             onDeleteProvider={deleteProvider}
             onSelectProvider={selectProvider}
-            onBack={() => setPage('new-session')}
+            colorScheme={colorScheme}
+            language={language}
+            onColorSchemeChange={setColorScheme}
+            onLanguageChange={setLanguage}
           />
         )}
         {page === 'about' && <AboutPage />}

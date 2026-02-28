@@ -1,4 +1,3 @@
-import { Settings } from 'lucide-react'
 import { useEffect, useRef, useMemo } from 'react'
 import type { ChatMessage } from '@/lib/types'
 import type { ToolStatus as ToolStatusType } from '@/lib/hooks/useChat'
@@ -8,7 +7,6 @@ import { WelcomeHero } from '@/components/WelcomeHero'
 
 interface ChatAreaProps {
   hasProvider: boolean
-  onOpenSettings: () => void
   messages: ChatMessage[]
   streamingText: string
   isLoading: boolean
@@ -16,7 +14,7 @@ interface ChatAreaProps {
   error: string | null
 }
 
-export function ChatArea({ hasProvider, onOpenSettings, messages, streamingText, isLoading, toolStatuses, error }: ChatAreaProps) {
+export function ChatArea({ hasProvider, messages, streamingText, isLoading, toolStatuses, error }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -61,21 +59,12 @@ export function ChatArea({ hasProvider, onOpenSettings, messages, streamingText,
             <WelcomeHero size="sm" />
           ) : (
             <>
-              <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60">
-                <Settings className="h-7 w-7 text-muted-foreground" />
-              </div>
               <div>
-                <h2 className="mb-1 text-lg font-semibold">Set up a provider</h2>
-                <p className="text-xs text-muted-foreground max-w-[220px]">
-                  Add an LLM provider to start chatting
+                <h2 className="mb-1 text-lg font-semibold">No provider configured</h2>
+                <p className="text-xs text-muted-foreground max-w-[260px]">
+                  Configure a provider in Settings to start chatting.
                 </p>
               </div>
-              <button
-                onClick={onOpenSettings}
-                className="mt-2 cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80"
-              >
-                Go to Settings
-              </button>
             </>
           )}
         </div>

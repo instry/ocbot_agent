@@ -20,7 +20,6 @@ interface ChatInputProps {
   providers?: LlmProvider[]
   selectedProvider?: LlmProvider | null
   onSelectProvider?: (id: string) => void
-  onConfigureLlm?: () => void
 }
 
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({
@@ -34,7 +33,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   providers,
   selectedProvider,
   onSelectProvider,
-  onConfigureLlm,
 }, ref) {
   const [input, setInput] = useState('')
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -141,13 +139,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                   {dropdownOpen && (
                     <div className="absolute right-0 bottom-full mb-1 min-w-[180px] rounded-lg border border-border bg-popover p-1 shadow-lg">
                       {providers!.length === 0 ? (
-                        <button
-                          type="button"
-                          onClick={() => { setDropdownOpen(false); onConfigureLlm?.() }}
-                          className="w-full cursor-pointer rounded-md px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                        >
-                          Configure LLM...
-                        </button>
+                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                          No providers configured
+                        </div>
                       ) : (
                         providers!.map((p) => (
                           <button

@@ -3,12 +3,11 @@ import { ChatArea } from '@/components/ChatArea'
 import { ChatInput } from '@/components/ChatInput'
 import { ChatList } from '@/components/ChatList'
 import { Header } from './components/Header'
-import { Settings } from '@/components/Settings'
 import { useLlmProvider } from '@/lib/llm/useLlmProvider'
 import { useChat } from '@/lib/hooks/useChat'
 import type { ChannelStatus } from '@/lib/channels/types'
 
-type View = 'chat' | 'chatList' | 'settings'
+type View = 'chat' | 'chatList'
 
 export function App() {
   const [view, setView] = useState<View>('chat')
@@ -102,19 +101,16 @@ export function App() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
-      {view !== 'settings' && (
-        <Header
-          view={view === 'chatList' ? 'history' : 'chat'}
-          onNewChat={() => { newChat(); setView('chat') }}
-          onToggleHistory={() => setView(v => v === 'chatList' ? 'chat' : 'chatList')}
-          onClose={() => window.close()}
-        />
-      )}
+      <Header
+        view={view === 'chatList' ? 'history' : 'chat'}
+        onNewChat={() => { newChat(); setView('chat') }}
+        onToggleHistory={() => setView(v => v === 'chatList' ? 'chat' : 'chatList')}
+        onClose={() => window.close()}
+      />
       {view === 'chat' && (
         <>
           <ChatArea
             hasProvider={!!selectedProvider}
-            onOpenSettings={() => setView('settings')}
             messages={messages}
             streamingText={streamingText}
             isLoading={isLoading}
@@ -129,7 +125,6 @@ export function App() {
             providers={providers}
             selectedProvider={selectedProvider}
             onSelectProvider={selectProvider}
-            onConfigureLlm={() => setView('settings')}
           />
         </>
       )}
@@ -139,16 +134,6 @@ export function App() {
           activeConversationId={conversationId}
           onSelectChat={handleSelectChat}
           onDeleteChat={removeConversation}
-        />
-      )}
-      {view === 'settings' && (
-        <Settings
-          providers={providers}
-          selectedProvider={selectedProvider}
-          onSaveProvider={saveProvider}
-          onDeleteProvider={deleteProvider}
-          onSelectProvider={selectProvider}
-          onBack={() => setView('chat')}
         />
       )}
     </div>
