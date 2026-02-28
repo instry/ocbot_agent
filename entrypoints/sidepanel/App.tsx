@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { ChatArea } from '@/components/ChatArea'
 import { ChatInput } from '@/components/ChatInput'
+import type { ChatInputHandle } from '@/components/ChatInput'
+import { SuggestionChips } from '@/components/SuggestionChips'
 import { ChatList } from '@/components/ChatList'
 import { Header } from './components/Header'
 import { useLlmProvider } from '@/lib/llm/useLlmProvider'
@@ -19,6 +21,7 @@ export function App() {
   } = useChat(selectedProvider)
   const [channelStatuses, setChannelStatuses] = useState<Record<string, ChannelStatus>>({})
   const pendingMessageRef = useRef<string | null>(null)
+  const chatInputRef = useRef<ChatInputHandle>(null)
 
   // Process pending message once provider is ready
   useEffect(() => {
@@ -117,7 +120,13 @@ export function App() {
             toolStatuses={toolStatuses}
             error={error}
           />
+          {messages.length === 0 && !isLoading && (
+            <div className="px-3 pb-2">
+              <SuggestionChips onSelect={(text) => chatInputRef.current?.setInput(text)} />
+            </div>
+          )}
           <ChatInput
+            ref={chatInputRef}
             onSend={sendMessage}
             onStop={stopAgent}
             isLoading={isLoading}

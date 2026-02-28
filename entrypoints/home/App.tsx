@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { WelcomeHero } from '@/components/WelcomeHero'
 import { ChatInput } from '@/components/ChatInput'
 import type { ChatInputHandle } from '@/components/ChatInput'
+import { SuggestionChips } from '@/components/SuggestionChips'
 import { Settings } from '@/components/Settings'
 import { ChannelSettings } from '@/components/ChannelSettings'
 import { Sidebar } from './components/Sidebar'
@@ -13,13 +14,6 @@ import type { LlmProvider } from '@/lib/llm/types'
 import type { ChannelStatus } from '@/lib/channels/types'
 
 type Page = 'new-session' | 'skills' | 'remote' | 'settings' | 'about'
-
-const SUGGESTION_CHIPS = [
-  'Search for flights',
-  'Monitor prices',
-  'Find leads',
-  'Scrape job listings',
-]
 
 function NewSessionPage({
   providers,
@@ -58,17 +52,7 @@ function NewSessionPage({
           onSaveProvider={saveProvider}
           onDeleteProvider={deleteProvider}
         />
-        <div className="flex flex-wrap justify-center gap-2">
-          {SUGGESTION_CHIPS.map((chip) => (
-            <button
-              key={chip}
-              onClick={() => chatInputRef.current?.setInput(chip)}
-              className="cursor-pointer rounded-full border border-border/60 px-3.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-            >
-              {chip}
-            </button>
-          ))}
-        </div>
+        <SuggestionChips onSelect={(text) => chatInputRef.current?.setInput(text)} />
       </div>
     </div>
   )
