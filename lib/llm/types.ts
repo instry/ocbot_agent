@@ -6,6 +6,13 @@ export interface ModelInfo {
   contextWindow: number
 }
 
+export interface ProviderRegion {
+  id: string
+  label: string
+  baseUrl: string
+  apiKeyUrl?: string
+}
+
 export interface ProviderTemplate {
   type: ProviderType
   name: string
@@ -14,6 +21,7 @@ export interface ProviderTemplate {
   defaultModelId: string
   apiKeyUrl?: string
   apiKeyPlaceholder?: string
+  regions?: ProviderRegion[]
 }
 
 export interface LlmProvider {

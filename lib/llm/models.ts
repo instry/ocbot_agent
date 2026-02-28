@@ -30,13 +30,16 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
   {
     type: 'minimax',
     name: 'MiniMax',
-    // Global: https://api.minimax.io/v1, CN: https://api.minimaxi.com/v1
     defaultBaseUrl: 'https://api.minimax.io/v1',
     apiKeyUrl: 'https://platform.minimax.io/user-center/basic-information/interface-key',
     apiKeyPlaceholder: 'API key',
     defaultModelId: 'minimax-m2.5',
     models: [
       { id: 'minimax-m2.5', name: 'MiniMax M2.5', contextWindow: 1000000 },
+    ],
+    regions: [
+      { id: 'global', label: 'Global', baseUrl: 'https://api.minimax.io/v1', apiKeyUrl: 'https://platform.minimax.io/user-center/basic-information/interface-key' },
+      { id: 'cn', label: 'China', baseUrl: 'https://api.minimaxi.com/v1', apiKeyUrl: 'https://platform.minimax.io/user-center/basic-information/interface-key' },
     ],
   },
   {
@@ -80,13 +83,16 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
   {
     type: 'glm',
     name: 'Z-AI (Zhipu)',
-    // Global: https://api.z.ai/api/paas/v4, CN: https://open.bigmodel.cn/api/paas/v4
     defaultBaseUrl: 'https://api.z.ai/api/paas/v4',
     apiKeyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
     apiKeyPlaceholder: 'API key',
     defaultModelId: 'glm-5',
     models: [
       { id: 'glm-5', name: 'GLM-5', contextWindow: 128000 },
+    ],
+    regions: [
+      { id: 'global', label: 'Global', baseUrl: 'https://api.z.ai/api/paas/v4', apiKeyUrl: 'https://open.bigmodel.cn/usercenter/apikeys' },
+      { id: 'cn', label: 'China', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', apiKeyUrl: 'https://open.bigmodel.cn/usercenter/apikeys' },
     ],
   },
   {
@@ -165,4 +171,14 @@ export function getModelDisplayName(provider: LlmProvider): string {
   const template = PROVIDER_TEMPLATES.find(t => t.type === provider.type)
   const model = template?.models.find(m => m.id === provider.modelId)
   return model?.name ?? provider.modelId ?? provider.name
+}
+
+export function getRegionBaseUrl(template: ProviderTemplate, region: string): string {
+  const r = template.regions?.find(r => r.id === region)
+  return r?.baseUrl ?? template.defaultBaseUrl ?? ''
+}
+
+export function getRegionApiKeyUrl(template: ProviderTemplate, region: string): string | undefined {
+  const r = template.regions?.find(r => r.id === region)
+  return r?.apiKeyUrl ?? template.apiKeyUrl
 }

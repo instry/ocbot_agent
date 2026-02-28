@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ExternalLink, Check } from 'lucide-react'
 import type { LlmProvider, ProviderType } from '@/lib/llm/types'
-import { PROVIDER_TEMPLATES, getTemplateByType } from '@/lib/llm/models'
+import { PROVIDER_TEMPLATES, getTemplateByType, getRegionBaseUrl, getRegionApiKeyUrl } from '@/lib/llm/models'
 
 interface ProviderFormProps {
   initial?: LlmProvider
@@ -19,6 +19,13 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
   const [name, setName] = useState(initial?.name ?? initTemplate?.name ?? '')
   const [apiKey, setApiKey] = useState(initial?.apiKey ?? '')
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? initTemplate?.defaultBaseUrl ?? '')
+  const [region, setRegion] = useState<string>(() => {
+    if (initial?.baseUrl && initTemplate?.regions) {
+      const match = initTemplate.regions.find(r => r.baseUrl === initial.baseUrl)
+      if (match) return match.id
+    }
+    return initTemplate?.regions?.[0]?.id ?? ''
+  })
   // For add: multi-select; for edit: single
   const [modelIds, setModelIds] = useState<Set<string>>(() => {
     const id = initial?.modelId ?? initTemplate?.defaultModelId ?? ''
@@ -35,12 +42,20 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
     const tmpl = getTemplateByType(type)
     if (!initial) {
       setName(tmpl?.name ?? '')
-      setBaseUrl(tmpl?.defaultBaseUrl ?? '')
+      const defaultRegion = tmpl?.regions?.[0]
+      setRegion(defaultRegion?.id ?? '')
+      setBaseUrl(defaultRegion?.baseUrl ?? tmpl?.defaultBaseUrl ?? '')
       const defaultId = tmpl?.defaultModelId ?? ''
       setModelIds(defaultId ? new Set([defaultId]) : new Set())
       setModelId(defaultId)
       setApiKey('')
     }
+  }
+
+  const handleRegionChange = (regionId: string) => {
+    setRegion(regionId)
+    const r = template?.regions?.find(r => r.id === regionId)
+    if (r) setBaseUrl(r.baseUrl)
   }
 
   const toggleModel = (id: string) => {
@@ -95,6 +110,8 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
     }
   }
 
+  const activeApiKeyUrl = template ? getRegionApiKeyUrl(template, region) : undefined
+
   const gridCols = compact ? 'grid-cols-4' : 'grid-cols-5'
 
   return (
@@ -121,6 +138,29 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
         </fieldset>
       )}
 
+      {/* Region Selector — only shown for providers with regional variants */}
+      {template?.regions && template.regions.length > 0 && (
+        <fieldset>
+          <label className="mb-2 block text-sm font-medium">Region</label>
+          <div className="flex gap-1 rounded-lg border border-border/50 bg-muted/30 p-0.5">
+            {template.regions.map(r => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => handleRegionChange(r.id)}
+                className={`flex-1 cursor-pointer rounded-md px-3 py-1.5 text-xs transition-colors ${
+                  region === r.id
+                    ? 'bg-background font-medium text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
+
       {/* Name */}
       <fieldset>
         <label className="mb-2 block text-sm font-medium">Display Name</label>
@@ -137,9 +177,9 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
       <fieldset>
         <div className="mb-2 flex items-center justify-between">
           <label className="text-sm font-medium">API Key</label>
-          {template?.apiKeyUrl && (
+          {activeApiKeyUrl && (
             <a
-              href={template.apiKeyUrl}
+              href={activeApiKeyUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-xs text-primary hover:underline"
