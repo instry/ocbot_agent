@@ -19,8 +19,11 @@ declare module '#imports' {
   export { useState, useCallback, useMemo, useEffect, useRef, useContext, useReducer } from 'react';
   export { fakeBrowser } from 'wxt/testing';
   export { BotAvatar } from '../components/BotAvatar';
+  export { ChannelSettings } from '../components/ChannelSettings';
   export { ChatArea } from '../components/ChatArea';
-  export { ChatInput } from '../components/ChatInput';
+  export { ChatInput, ChatInputHandle } from '../components/ChatInput';
   export { ChatList } from '../components/ChatList';
   export { MessageBubble, ToolBatch, LiveToolStatus, ToolBatchItem, ToolBatchProps, LiveToolStatusProps } from '../components/MessageBubble';
+  export { Settings } from '../components/Settings';
+  export { WelcomeHero } from '../components/WelcomeHero';
 }

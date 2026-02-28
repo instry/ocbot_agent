@@ -2,6 +2,7 @@
 export {}
 declare global {
   const BotAvatar: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/BotAvatar').BotAvatar
+  const ChannelSettings: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/ChannelSettings').ChannelSettings
   const ChatArea: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/ChatArea').ChatArea
   const ChatInput: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/ChatInput').ChatInput
   const ChatList: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/ChatList').ChatList
@@ -10,7 +11,9 @@ declare global {
   const LiveToolStatus: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/MessageBubble').LiveToolStatus
   const MatchPattern: typeof import('wxt/utils/match-patterns').MatchPattern
   const MessageBubble: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/MessageBubble').MessageBubble
+  const Settings: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/Settings').Settings
   const ToolBatch: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/MessageBubble').ToolBatch
+  const WelcomeHero: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/WelcomeHero').WelcomeHero
   const browser: typeof import('wxt/browser').browser
   const createIframeUi: typeof import('wxt/utils/content-script-ui/iframe').createIframeUi
   const createIntegratedUi: typeof import('wxt/utils/content-script-ui/integrated').createIntegratedUi
@@ -61,6 +64,9 @@ declare global {
   // @ts-ignore
   export type { ScriptPublicPath, InjectScriptOptions } from 'wxt/utils/inject-script'
   import('wxt/utils/inject-script')
+  // @ts-ignore
+  export type { ChatInputHandle } from '/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/ChatInput'
+  import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/ChatInput')
   // @ts-ignore
   export type { ToolBatchItem, ToolBatchProps, LiveToolStatusProps } from '/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/MessageBubble'
   import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/MessageBubble')

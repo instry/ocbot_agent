@@ -13,7 +13,7 @@ interface ChatInputProps {
   onStop?: () => void
   isLoading?: boolean
   disabled?: boolean
-  variant?: 'footer' | 'standalone'
+  variant?: 'footer' | 'standalone' | 'centered'
   rows?: number
   minHeight?: string
   // LLM dropdown (optional — omit to hide)

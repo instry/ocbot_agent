@@ -4,6 +4,7 @@ import type { ChatMessage } from '@/lib/types'
 import type { ToolStatus as ToolStatusType } from '@/lib/hooks/useChat'
 import { MessageBubble, LiveToolStatus, ToolBatch } from '@/components/MessageBubble'
 import { BotAvatar } from '@/components/BotAvatar'
+import { WelcomeHero } from '@/components/WelcomeHero'
 
 interface ChatAreaProps {
   hasProvider: boolean
@@ -57,14 +58,7 @@ export function ChatArea({ hasProvider, onOpenSettings, messages, streamingText,
       <main className="flex-1 overflow-y-auto">
         <div className="flex h-full flex-col items-center justify-center space-y-4 text-center px-4">
           {hasProvider ? (
-            <>
-              <div className="mb-2">
-                <BotAvatar size="lg" />
-              </div>
-              <div>
-                <h2 className="mb-1 text-lg font-semibold">How can I help?</h2>
-              </div>
-            </>
+            <WelcomeHero size="sm" />
           ) : (
             <>
               <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { BotAvatar } from '@/components/BotAvatar'
+import { WelcomeHero } from '@/components/WelcomeHero'
 import { ChatInput } from '@/components/ChatInput'
 import type { ChatInputHandle } from '@/components/ChatInput'
 import { Settings } from '@/components/Settings'
@@ -41,14 +41,7 @@ function NewSessionPage({
   return (
     <div className="flex h-full items-center justify-center">
       <div className="flex w-full max-w-2xl flex-col items-center gap-6 px-6">
-        <div className="flex flex-col items-center gap-3">
-          <div className="ring-4 ring-primary/10 rounded-full">
-            <BotAvatar size="lg" />
-          </div>
-          <h1 className="text-3xl font-semibold text-foreground">
-            How can I help?
-          </h1>
-        </div>
+        <WelcomeHero size="lg" />
         <ChatInput
           ref={chatInputRef}
           onSend={handleSend}
