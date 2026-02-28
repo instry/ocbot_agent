@@ -1,5 +1,5 @@
 import { BotAvatar } from '@/components/BotAvatar'
-import { MessageCircleQuestion } from 'lucide-react'
+import { MessageCircleQuestion, Globe, Mail } from 'lucide-react'
 
 const FAQ = [
   {
@@ -22,6 +22,14 @@ const FAQ = [
     q: 'Will you leak my data?',
     a: 'Nope! All your data is stored locally on your machine.',
   },
+]
+
+const SOCIALS = [
+  { name: 'X', url: 'https://x.com/ocbot_ai' },
+  { name: 'Instagram', url: 'https://instagram.com/ocbot_ai' },
+  { name: 'YouTube', url: 'https://youtube.com/@ocbot_ai' },
+  { name: 'Discord', url: 'https://discord.gg/ocbot_ai' },
+  { name: 'TikTok', url: 'https://tiktok.com/@ocbot_ai' },
 ]
 
 export function AboutPage() {
@@ -62,8 +70,33 @@ export function AboutPage() {
           </div>
         </div>
 
-        {/* Version */}
-        <div className="mt-8 pb-4 text-center text-xs text-muted-foreground/50">v0.1.0</div>
+        {/* Contact & Socials */}
+        <div className="mt-8 flex flex-col items-center gap-3 pb-4">
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <a href="https://oc.bot" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 transition-colors hover:text-foreground">
+              <Globe className="h-3.5 w-3.5" />
+              oc.bot
+            </a>
+            <a href="mailto:hi@oc.bot" className="flex items-center gap-1.5 transition-colors hover:text-foreground">
+              <Mail className="h-3.5 w-3.5" />
+              hi@oc.bot
+            </a>
+          </div>
+          <div className="flex flex-wrap justify-center gap-2">
+            {SOCIALS.map(({ name, url }) => (
+              <a
+                key={name}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-full border border-border/60 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+              >
+                {name}
+              </a>
+            ))}
+          </div>
+          <span className="mt-1 text-xs text-muted-foreground/50">v0.1.0</span>
+        </div>
       </div>
     </div>
   )
