@@ -37,13 +37,19 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
   const template = getTemplateByType(providerType)
   const isCustom = providerType === 'openai-compatible' || providerType === 'local'
 
+  const buildName = (tmpl: ReturnType<typeof getTemplateByType>, regionId: string) => {
+    const base = tmpl?.name ?? ''
+    const r = tmpl?.regions?.find(r => r.id === regionId)
+    return r ? `${base} (${r.label})` : base
+  }
+
   const handleTypeChange = (type: ProviderType) => {
     setProviderType(type)
     const tmpl = getTemplateByType(type)
     if (!initial) {
-      setName(tmpl?.name ?? '')
       const defaultRegion = tmpl?.regions?.[0]
       setRegion(defaultRegion?.id ?? '')
+      setName(buildName(tmpl, defaultRegion?.id ?? ''))
       setBaseUrl(defaultRegion?.baseUrl ?? tmpl?.defaultBaseUrl ?? '')
       const defaultId = tmpl?.defaultModelId ?? ''
       setModelIds(defaultId ? new Set([defaultId]) : new Set())
@@ -55,7 +61,10 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
   const handleRegionChange = (regionId: string) => {
     setRegion(regionId)
     const r = template?.regions?.find(r => r.id === regionId)
-    if (r) setBaseUrl(r.baseUrl)
+    if (r) {
+      setBaseUrl(r.baseUrl)
+      setName(buildName(template, regionId))
+    }
   }
 
   const toggleModel = (id: string) => {
