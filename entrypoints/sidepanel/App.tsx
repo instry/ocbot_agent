@@ -3,7 +3,7 @@ import { ChatArea } from '@/components/ChatArea'
 import { ChatInput } from '@/components/ChatInput'
 import { ChatList } from '@/components/ChatList'
 import { Header } from './components/Header'
-import { Settings } from './components/Settings'
+import { Settings } from '@/components/Settings'
 import { useLlmProvider } from '@/lib/llm/useLlmProvider'
 import { useChat } from '@/lib/hooks/useChat'
 import type { ChannelStatus } from '@/lib/channels/types'
@@ -92,9 +92,6 @@ export function App() {
       {view === 'chat' ? (
         <>
           <Header
-            selectedProvider={selectedProvider}
-            providers={providers}
-            onSelectProvider={selectProvider}
             onOpenSettings={() => setView('settings')}
             onNewChat={newChat}
             onOpenChatList={() => setView('chatList')}
@@ -114,6 +111,10 @@ export function App() {
             onStop={stopAgent}
             isLoading={isLoading}
             disabled={!selectedProvider}
+            providers={providers}
+            selectedProvider={selectedProvider}
+            onSelectProvider={selectProvider}
+            onConfigureLlm={() => setView('settings')}
           />
         </>
       ) : view === 'chatList' ? (

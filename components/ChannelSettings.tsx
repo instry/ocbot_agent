@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Power, PowerOff } from 'lucide-react'
-import type { ChannelConfig, ChannelStatus } from '../../../lib/channels/types'
-import { getChannelConfigs, saveChannelConfig, deleteChannelConfig } from '../../../lib/storage'
+import type { ChannelConfig, ChannelStatus } from '@/lib/channels/types'
+import { getChannelConfigs, saveChannelConfig, deleteChannelConfig } from '@/lib/storage'
 
 interface ChannelSettingsProps {
   channelStatuses: Record<string, ChannelStatus>

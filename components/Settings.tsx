@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { ArrowLeft, Plus, Trash2, ExternalLink } from 'lucide-react'
-import type { LlmProvider, ProviderType } from '../../../lib/llm/types'
-import type { ChannelStatus } from '../../../lib/channels/types'
-import { PROVIDER_TEMPLATES, getTemplateByType } from '../../../lib/llm/models'
-import { ChannelSettings } from './ChannelSettings'
+import type { LlmProvider, ProviderType } from '@/lib/llm/types'
+import type { ChannelStatus } from '@/lib/channels/types'
+import { PROVIDER_TEMPLATES, getTemplateByType } from '@/lib/llm/models'
+import { ChannelSettings } from '@/components/ChannelSettings'
 
 interface SettingsProps {
   providers: LlmProvider[]

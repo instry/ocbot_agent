@@ -1,39 +1,14 @@
-import { Settings, ChevronDown, SquarePen, PanelLeft } from 'lucide-react'
-import { useState, useRef, useEffect } from 'react'
-import type { LlmProvider } from '../../../lib/llm/types'
-import type { ChannelStatus } from '../../../lib/channels/types'
-import { getTemplateByType } from '../../../lib/llm/models'
+import { Settings, SquarePen, PanelLeft } from 'lucide-react'
+import type { ChannelStatus } from '@/lib/channels/types'
 
 interface HeaderProps {
-  selectedProvider: LlmProvider | null
-  providers: LlmProvider[]
-  onSelectProvider: (id: string) => void
   onOpenSettings: () => void
   onNewChat: () => void
   onOpenChatList: () => void
   channelStatuses: Record<string, ChannelStatus>
 }
 
-export function Header({ selectedProvider, providers, onSelectProvider, onOpenSettings, onNewChat, onOpenChatList, channelStatuses }: HeaderProps) {
-  const [dropdownOpen, setDropdownOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  const getModelDisplayName = (provider: LlmProvider) => {
-    const template = getTemplateByType(provider.type)
-    const model = template?.models.find(m => m.id === provider.modelId)
-    return model?.name ?? provider.modelId
-  }
-
+export function Header({ onOpenSettings, onNewChat, onOpenChatList, channelStatuses }: HeaderProps) {
   // Compute aggregate channel status
   const statusValues = Object.values(channelStatuses)
   const aggregateChannelStatus: ChannelStatus | null =
@@ -50,45 +25,7 @@ export function Header({ selectedProvider, providers, onSelectProvider, onOpenSe
 
   return (
     <header className="flex items-center justify-between border-b border-border/40 px-3 py-2">
-      <div className="relative" ref={dropdownRef}>
-        <button
-          onClick={() => providers.length > 0 && setDropdownOpen(!dropdownOpen)}
-          className={`flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm transition-colors hover:bg-muted/80 ${
-            providers.length > 0 ? 'cursor-pointer' : ''
-          }`}
-        >
-          {selectedProvider ? (
-            <>
-              <span className="font-medium">{selectedProvider.name}</span>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-muted-foreground">{getModelDisplayName(selectedProvider)}</span>
-            </>
-          ) : (
-            <span className="text-muted-foreground">No provider configured</span>
-          )}
-          {providers.length > 0 && <ChevronDown className="ml-0.5 h-3.5 w-3.5 text-muted-foreground" />}
-        </button>
-
-        {dropdownOpen && providers.length > 0 && (
-          <div className="absolute left-0 top-full z-50 mt-1 min-w-[200px] rounded-lg border border-border bg-popover p-1 shadow-lg">
-            {providers.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => {
-                  onSelectProvider(p.id)
-                  setDropdownOpen(false)
-                }}
-                className={`flex w-full cursor-pointer items-center justify-between rounded-md px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent ${
-                  p.id === selectedProvider?.id ? 'bg-accent/50 font-medium' : ''
-                }`}
-              >
-                <span>{p.name}</span>
-                <span className="text-xs text-muted-foreground">{getModelDisplayName(p)}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <span className="text-sm font-semibold">Ocbot</span>
 
       <div className="flex items-center gap-0.5">
         <button
