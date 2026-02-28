@@ -135,8 +135,6 @@ export function App() {
           onDeleteProvider={deleteProvider}
           onSelectProvider={selectProvider}
           onBack={() => setView('chat')}
-          channelStatuses={channelStatuses}
-          onRefreshChannelStatuses={refreshChannelStatuses}
         />
       )}
     </div>

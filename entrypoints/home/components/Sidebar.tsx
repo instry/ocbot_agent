@@ -1,7 +1,7 @@
-import { SquarePen, Puzzle, Settings } from 'lucide-react'
+import { SquarePen, Puzzle, Smartphone, Settings } from 'lucide-react'
 import { BotAvatar } from '@/components/BotAvatar'
 
-type Page = 'new-session' | 'skills' | 'settings'
+type Page = 'new-session' | 'skills' | 'remote' | 'settings'
 
 interface SidebarProps {
   activePage: Page
@@ -11,6 +11,7 @@ interface SidebarProps {
 const navItems: { id: Page; label: string; icon: typeof SquarePen }[] = [
   { id: 'new-session', label: 'New Session', icon: SquarePen },
   { id: 'skills', label: 'Skills', icon: Puzzle },
+  { id: 'remote', label: 'Remote', icon: Smartphone },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
 

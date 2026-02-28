@@ -1,14 +1,16 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { BotAvatar } from '@/components/BotAvatar'
 import { ChatInput } from '@/components/ChatInput'
 import type { ChatInputHandle } from '@/components/ChatInput'
 import { Settings } from '@/components/Settings'
+import { ChannelSettings } from '@/components/ChannelSettings'
 import { Sidebar } from './components/Sidebar'
 import { SkillsPage } from './pages/SkillsPage'
 import { useLlmProvider } from '@/lib/llm/useLlmProvider'
 import type { LlmProvider } from '@/lib/llm/types'
+import type { ChannelStatus } from '@/lib/channels/types'
 
-type Page = 'new-session' | 'skills' | 'settings'
+type Page = 'new-session' | 'skills' | 'remote' | 'settings'
 
 const SUGGESTION_CHIPS = [
   'Search for flights',
@@ -77,10 +79,36 @@ function NewSessionPage({
 export function App() {
   const [page, setPage] = useState<Page>(() => {
     const hash = window.location.hash.replace('#/', '')
-    if (hash === 'skills' || hash === 'settings') return hash
+    if (hash === 'skills' || hash === 'remote' || hash === 'settings') return hash
     return 'new-session'
   })
   const { providers, selectedProvider, saveProvider, deleteProvider, selectProvider } = useLlmProvider()
+  const [channelStatuses, setChannelStatuses] = useState<Record<string, ChannelStatus>>({})
+
+  const refreshChannelStatuses = useCallback(() => {
+    chrome.runtime.sendMessage({ type: 'getChannelStatuses' }, (resp) => {
+      if (resp?.ok) {
+        setChannelStatuses(resp.statuses)
+      }
+    })
+  }, [])
+
+  useEffect(() => {
+    refreshChannelStatuses()
+    const interval = setInterval(refreshChannelStatuses, 5000)
+
+    const listener = (message: { type: string; channelId: string; status: ChannelStatus }) => {
+      if (message.type === 'channelStatusUpdate') {
+        setChannelStatuses(prev => ({ ...prev, [message.channelId]: message.status }))
+      }
+    }
+    chrome.runtime.onMessage.addListener(listener)
+
+    return () => {
+      clearInterval(interval)
+      chrome.runtime.onMessage.removeListener(listener)
+    }
+  }, [refreshChannelStatuses])
 
   return (
     <div className="flex h-screen w-screen bg-background text-foreground">
@@ -95,6 +123,19 @@ export function App() {
           />
         )}
         {page === 'skills' && <SkillsPage />}
+        {page === 'remote' && (
+          <div className="flex h-full flex-col">
+            <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
+              <h2 className="text-sm font-semibold">Remote Channels</h2>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3">
+              <ChannelSettings
+                channelStatuses={channelStatuses}
+                onRefreshStatuses={refreshChannelStatuses}
+              />
+            </div>
+          </div>
+        )}
         {page === 'settings' && (
           <Settings
             providers={providers}
@@ -103,8 +144,6 @@ export function App() {
             onDeleteProvider={deleteProvider}
             onSelectProvider={selectProvider}
             onBack={() => setPage('new-session')}
-            channelStatuses={{}}
-            onRefreshChannelStatuses={() => {}}
           />
         )}
       </main>
