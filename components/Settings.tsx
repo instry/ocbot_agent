@@ -212,7 +212,7 @@ function ProvidersTab({
             Back to Models
           </button>
           <h2 className="text-base font-semibold text-foreground">Edit Model</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Update your model configuration.</p>
+          <p className="mt-1 text-sm text-muted-foreground">{getTemplateByType(editingProvider.type)?.name ?? editingProvider.type}</p>
         </div>
         <div className="max-w-[640px]">
           <ProviderForm
