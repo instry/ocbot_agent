@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { SquarePen, Puzzle, Smartphone, Settings } from 'lucide-react'
+import { SquarePen, Puzzle, Smartphone, Settings, Info } from 'lucide-react'
 import { BotAvatar } from '@/components/BotAvatar'
 import { ChatList } from '@/components/ChatList'
 import { getConversations, deleteConversation } from '@/lib/storage'
 import type { Conversation } from '@/lib/types'
 
-type Page = 'new-session' | 'skills' | 'remote' | 'settings'
+type Page = 'new-session' | 'skills' | 'remote' | 'settings' | 'about'
 
 interface SidebarProps {
   activePage: Page
@@ -17,6 +17,7 @@ const bottomNavItems: { id: Page; label: string; icon: typeof Puzzle }[] = [
   { id: 'skills', label: 'Skills', icon: Puzzle },
   { id: 'remote', label: 'Remote', icon: Smartphone },
   { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'about', label: 'About', icon: Info },
 ]
 
 export function Sidebar({ activePage, onNavigate, onSelectConversation }: SidebarProps) {
@@ -89,9 +90,6 @@ export function Sidebar({ activePage, onNavigate, onSelectConversation }: Sideba
           </button>
         ))}
       </nav>
-      <div className="px-4 pb-4 text-[11px] text-muted-foreground/50">
-        v0.1.0
-      </div>
     </aside>
   )
 }

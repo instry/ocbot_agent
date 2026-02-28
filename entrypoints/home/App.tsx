@@ -6,11 +6,12 @@ import { Settings } from '@/components/Settings'
 import { ChannelSettings } from '@/components/ChannelSettings'
 import { Sidebar } from './components/Sidebar'
 import { SkillsPage } from './pages/SkillsPage'
+import { AboutPage } from './pages/AboutPage'
 import { useLlmProvider } from '@/lib/llm/useLlmProvider'
 import type { LlmProvider } from '@/lib/llm/types'
 import type { ChannelStatus } from '@/lib/channels/types'
 
-type Page = 'new-session' | 'skills' | 'remote' | 'settings'
+type Page = 'new-session' | 'skills' | 'remote' | 'settings' | 'about'
 
 const SUGGESTION_CHIPS = [
   'Search for flights',
@@ -72,7 +73,7 @@ function NewSessionPage({
 export function App() {
   const [page, setPage] = useState<Page>(() => {
     const hash = window.location.hash.replace('#/', '')
-    if (hash === 'skills' || hash === 'remote' || hash === 'settings') return hash
+    if (hash === 'skills' || hash === 'remote' || hash === 'settings' || hash === 'about') return hash
     return 'new-session'
   })
   const { providers, selectedProvider, saveProvider, deleteProvider, selectProvider } = useLlmProvider()
@@ -147,6 +148,7 @@ export function App() {
             onBack={() => setPage('new-session')}
           />
         )}
+        {page === 'about' && <AboutPage />}
       </main>
     </div>
   )
