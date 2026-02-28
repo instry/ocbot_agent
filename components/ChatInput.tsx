@@ -107,14 +107,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                     className="group flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition-colors hover:bg-muted"
                   >
                     {selectedProvider ? (
-                      <>
-                        <span className="text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
-                          {getTemplateByType(selectedProvider.type)?.name}
-                        </span>
-                        <span className="font-medium text-foreground/80 transition-colors group-hover:text-foreground">
-                          {getModelDisplayName(selectedProvider)}
-                        </span>
-                      </>
+                      <span className="font-medium text-foreground/80 transition-colors group-hover:text-foreground">
+                        {getModelDisplayName(selectedProvider)}
+                      </span>
                     ) : (
                       <span className="text-muted-foreground">Select model</span>
                     )}
@@ -176,17 +171,16 @@ function ModelPopover({ providers, selectedProvider, onSelect, onClose, onConnec
 
   const grouped = useMemo(() => {
     const q = search.toLowerCase().trim()
-    const groups: { name: string; items: { provider: LlmProvider; modelName: string; contextWindow?: number }[] }[] = []
+    const groups: { name: string; items: { provider: LlmProvider; modelName: string }[] }[] = []
     for (const p of providers) {
       const template = getTemplateByType(p.type)
       const groupName = template?.name ?? p.type
       const model = template?.models.find(m => m.id === p.modelId)
       const modelName = model?.name ?? p.modelId
-      const contextWindow = model?.contextWindow
       if (q && !groupName.toLowerCase().includes(q) && !modelName.toLowerCase().includes(q) && !p.name.toLowerCase().includes(q)) continue
       let group = groups.find(g => g.name === groupName)
       if (!group) { group = { name: groupName, items: [] }; groups.push(group) }
-      group.items.push({ provider: p, modelName, contextWindow })
+      group.items.push({ provider: p, modelName })
     }
     return groups
   }, [providers, search])
@@ -221,7 +215,7 @@ function ModelPopover({ providers, selectedProvider, onSelect, onClose, onConnec
           grouped.map(group => (
             <div key={group.name}>
               <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">{group.name}</div>
-              {group.items.map(({ provider: p, modelName, contextWindow }) => {
+              {group.items.map(({ provider: p, modelName }) => {
                 const isSelected = selectedProvider?.id === p.id
                 return (
                   <button key={p.id} type="button" onClick={() => onSelect(p.id)}
@@ -230,11 +224,6 @@ function ModelPopover({ providers, selectedProvider, onSelect, onClose, onConnec
                       {p.name !== (getTemplateByType(p.type)?.name ?? p.type) && <span className="mr-1.5 text-muted-foreground">{p.name}</span>}
                       <span className={isSelected ? 'font-medium' : ''}>{modelName}</span>
                     </span>
-                    {contextWindow && (
-                      <span className="shrink-0 text-[10px] text-muted-foreground/50">
-                        {contextWindow >= 1000000 ? `${(contextWindow / 1000000).toFixed(0)}M` : `${(contextWindow / 1000).toFixed(0)}k`}
-                      </span>
-                    )}
                     {isSelected && <Check className="h-3 w-3 shrink-0 text-primary" />}
                   </button>
                 )
