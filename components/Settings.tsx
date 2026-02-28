@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
-import { Sliders, Cpu, Plus, Trash2, Pencil, Star, ExternalLink, ArrowLeft, ChevronDown, Sun, Moon, Monitor, Globe, Check } from 'lucide-react'
-import type { LlmProvider, ProviderType } from '@/lib/llm/types'
-import { PROVIDER_TEMPLATES, getTemplateByType } from '@/lib/llm/models'
+import { Sliders, Cpu, Plus, Trash2, Pencil, Star, ArrowLeft, ChevronDown, Sun, Moon, Monitor, Globe } from 'lucide-react'
+import type { LlmProvider } from '@/lib/llm/types'
+import { getTemplateByType } from '@/lib/llm/models'
 import type { ColorScheme, Language } from '@/lib/hooks/useSettings'
+import { ProviderForm } from './ProviderForm'
 
 // --- Types ---
 
@@ -32,7 +33,7 @@ export function Settings({
   const [editingProvider, setEditingProvider] = useState<LlmProvider | null>(null)
 
   const tabs: { id: SettingsTab; label: string; icon: typeof Sliders }[] = [
-    { id: 'providers', label: 'Providers', icon: Cpu },
+    { id: 'providers', label: 'Models', icon: Cpu },
     { id: 'general', label: 'General', icon: Sliders },
   ]
 
@@ -185,10 +186,9 @@ function ProvidersTab({
             className="mb-3 flex cursor-pointer items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Providers
+            Back to Models
           </button>
-          <h2 className="text-base font-semibold text-foreground">Add Provider</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Configure a new LLM provider.</p>
+          <h2 className="text-base font-semibold text-foreground">Set Model</h2>
         </div>
         <div className="max-w-[640px]">
           <ProviderForm
@@ -209,10 +209,10 @@ function ProvidersTab({
             className="mb-3 flex cursor-pointer items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Providers
+            Back to Models
           </button>
-          <h2 className="text-base font-semibold text-foreground">Edit Provider</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Update your provider configuration.</p>
+          <h2 className="text-base font-semibold text-foreground">Edit Model</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Update your model configuration.</p>
         </div>
         <div className="max-w-[640px]">
           <ProviderForm
@@ -228,14 +228,14 @@ function ProvidersTab({
   return (
     <div className="flex h-full flex-col px-8 pb-10">
       <div className="sticky top-0 z-10 bg-background pt-6 pb-6">
-        <h2 className="text-base font-semibold text-foreground">Providers</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Manage your LLM providers.</p>
+        <h2 className="text-base font-semibold text-foreground">Models</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Manage your LLM models.</p>
       </div>
 
       <div className="max-w-[640px] space-y-3">
         {providers.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            No providers configured yet. Add one to get started.
+            No models configured yet. Add one to get started.
           </p>
         )}
 
@@ -304,10 +304,10 @@ function ProvidersTab({
 
         <button
           onClick={() => setView('add')}
-          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 py-4 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" />
-          Add Provider
+          Add Model
         </button>
       </div>
     </div>
@@ -386,247 +386,6 @@ function SelectDropdown<T extends string>({ options, value, onChange }: {
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-// --- Provider Form ---
-
-function ProviderForm({ initial, onSave, onCancel }: {
-  initial?: LlmProvider
-  onSave: (provider: LlmProvider) => Promise<void>
-  onCancel: () => void
-}) {
-  const initTemplate = getTemplateByType(initial?.type ?? 'google')
-  const [providerType, setProviderType] = useState<ProviderType>(initial?.type ?? 'google')
-  const [name, setName] = useState(initial?.name ?? initTemplate?.name ?? '')
-  const [apiKey, setApiKey] = useState(initial?.apiKey ?? '')
-  const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? initTemplate?.defaultBaseUrl ?? '')
-  // For add: multi-select; for edit: single
-  const [modelIds, setModelIds] = useState<Set<string>>(() => {
-    const id = initial?.modelId ?? initTemplate?.defaultModelId ?? ''
-    return id ? new Set([id]) : new Set()
-  })
-  const [modelId, setModelId] = useState(initial?.modelId ?? initTemplate?.defaultModelId ?? '')
-  const [saving, setSaving] = useState(false)
-
-  const template = getTemplateByType(providerType)
-
-  const handleTypeChange = (type: ProviderType) => {
-    setProviderType(type)
-    const tmpl = getTemplateByType(type)
-    if (!initial) {
-      setName(tmpl?.name ?? '')
-      setBaseUrl(tmpl?.defaultBaseUrl ?? '')
-      const defaultId = tmpl?.defaultModelId ?? ''
-      setModelIds(defaultId ? new Set([defaultId]) : new Set())
-      setModelId(defaultId)
-      setApiKey('')
-    }
-  }
-
-  const toggleModel = (id: string) => {
-    setModelIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        if (next.size > 1) next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
-  const handleSubmit = async () => {
-    if (!apiKey.trim() && providerType !== 'openai-compatible' && providerType !== 'local') return
-    setSaving(true)
-    try {
-      if (initial) {
-        // Edit: save single provider
-        await onSave({
-          id: initial.id,
-          type: providerType,
-          name: name.trim() || template?.name || providerType,
-          apiKey: apiKey.trim(),
-          baseUrl: baseUrl.trim() || undefined,
-          modelId: modelId.trim(),
-          createdAt: initial.createdAt,
-          updatedAt: Date.now(),
-        })
-      } else {
-        // Add: create one entry per selected model
-        const ids = template && template.models.length > 0
-          ? Array.from(modelIds)
-          : [modelId.trim()]
-        for (const mid of ids) {
-          if (!mid) continue
-          await onSave({
-            id: crypto.randomUUID(),
-            type: providerType,
-            name: name.trim() || template?.name || providerType,
-            apiKey: apiKey.trim(),
-            baseUrl: baseUrl.trim() || undefined,
-            modelId: mid,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          })
-        }
-      }
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="space-y-5">
-      {/* Provider Type */}
-      {!initial && (
-        <fieldset>
-          <label className="mb-2 block text-sm font-medium">Provider</label>
-          <div className="grid grid-cols-5 gap-2">
-            {PROVIDER_TEMPLATES.map(t => (
-              <button
-                key={t.type}
-                onClick={() => handleTypeChange(t.type)}
-                className={`cursor-pointer rounded-xl border px-3 py-2.5 text-xs transition-colors ${
-                  providerType === t.type
-                    ? 'border-primary bg-primary/10 font-medium text-primary'
-                    : 'border-border/50 hover:border-border'
-                }`}
-              >
-                {t.name}
-              </button>
-            ))}
-          </div>
-        </fieldset>
-      )}
-
-      {/* Name */}
-      <fieldset>
-        <label className="mb-2 block text-sm font-medium">Display Name</label>
-        <input
-          type="text"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder={template?.name}
-          className="w-full rounded-xl border border-border/50 bg-muted/50 px-4 py-2.5 text-sm outline-none transition-colors hover:border-border focus:border-primary"
-        />
-      </fieldset>
-
-      {/* API Key */}
-      <fieldset>
-        <div className="mb-2 flex items-center justify-between">
-          <label className="text-sm font-medium">API Key</label>
-          {template?.apiKeyUrl && (
-            <a
-              href={template.apiKeyUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              Get key <ExternalLink className="h-3 w-3" />
-            </a>
-          )}
-        </div>
-        <input
-          type="password"
-          value={apiKey}
-          onChange={e => setApiKey(e.target.value)}
-          placeholder={template?.apiKeyPlaceholder ?? 'Enter API key'}
-          className="w-full rounded-xl border border-border/50 bg-muted/50 px-4 py-2.5 text-sm outline-none transition-colors hover:border-border focus:border-primary"
-        />
-      </fieldset>
-
-      {/* Base URL */}
-      <fieldset>
-        <label className="mb-2 block text-sm font-medium text-muted-foreground">Base URL</label>
-        <input
-          type="text"
-          value={baseUrl}
-          onChange={e => setBaseUrl(e.target.value)}
-          placeholder={template?.defaultBaseUrl ?? 'https://...'}
-          className="w-full rounded-xl border border-border/50 bg-muted/50 px-4 py-2.5 text-sm outline-none transition-colors hover:border-border focus:border-primary"
-        />
-      </fieldset>
-
-      {/* Model Selection */}
-      <fieldset>
-        <label className="mb-2 block text-sm font-medium">
-          Model{!initial && template && template.models.length > 1 ? 's' : ''}
-        </label>
-        {template && template.models.length > 0 ? (
-          initial ? (
-            // Edit mode: single select
-            <div className="grid grid-cols-2 gap-2">
-              {template.models.map(m => (
-                <button
-                  key={m.id}
-                  onClick={() => setModelId(m.id)}
-                  className={`flex cursor-pointer items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
-                    modelId === m.id
-                      ? 'border-primary bg-primary/10 font-medium text-primary'
-                      : 'border-border/50 hover:border-border'
-                  }`}
-                >
-                  <span>{m.name}</span>
-                  <span className="text-xs text-muted-foreground">{m.contextWindow >= 1000000 ? `${(m.contextWindow / 1000000).toFixed(0)}M` : `${(m.contextWindow / 1000).toFixed(0)}k`} ctx</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            // Add mode: multi select with checkboxes
-            <>
-              <div className="flex flex-wrap gap-2">
-                {template.models.map(m => {
-                  const selected = modelIds.has(m.id)
-                  return (
-                    <button
-                      key={m.id}
-                      onClick={() => toggleModel(m.id)}
-                      className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
-                        selected ? 'border-primary bg-primary/10' : 'border-border/50 hover:border-border'
-                      }`}
-                    >
-                      <div className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
-                        selected ? 'border-primary bg-primary' : 'border-muted-foreground/40'
-                      }`}>
-                        {selected && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
-                      </div>
-                      <span>{m.name}</span>
-                    </button>
-                  )
-                })}
-              </div>
-              <p className="mt-1.5 text-xs text-muted-foreground">Select one or more models to enable.</p>
-            </>
-          )
-        ) : (
-          <input
-            type="text"
-            value={modelId}
-            onChange={e => setModelId(e.target.value)}
-            placeholder="e.g. llama3.2:latest"
-            className="w-full rounded-xl border border-border/50 bg-muted/50 px-4 py-2.5 text-sm outline-none transition-colors hover:border-border focus:border-primary"
-          />
-        )}
-      </fieldset>
-
-      {/* Actions */}
-      <div className="flex gap-3 pt-2">
-        <button
-          onClick={onCancel}
-          className="cursor-pointer rounded-xl border border-border/50 px-6 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/80"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSubmit}
-          disabled={saving || (!apiKey.trim() && providerType !== 'openai-compatible' && providerType !== 'local') || (!initial && template && template.models.length > 0 && modelIds.size === 0)}
-          className="cursor-pointer rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80 disabled:opacity-50"
-        >
-          {saving ? 'Saving...' : initial ? 'Update' : 'Add Provider'}
-        </button>
-      </div>
     </div>
   )
 }
