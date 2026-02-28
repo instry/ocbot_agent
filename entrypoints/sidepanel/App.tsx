@@ -16,7 +16,7 @@ export function App() {
   const {
     messages, conversationId, conversations, streamingText, isLoading,
     toolStatuses, error, sendMessage, stopAgent, newChat,
-    loadConversation, updateConversation, removeConversation,
+    loadConversation, removeConversation,
   } = useChat(selectedProvider)
   const [channelStatuses, setChannelStatuses] = useState<Record<string, ChannelStatus>>({})
   const pendingMessageRef = useRef<string | null>(null)
@@ -32,17 +32,24 @@ export function App() {
 
   // Pick up pending message from home page (on mount)
   useEffect(() => {
-    chrome.storage.local.get('ocbot_pending_message').then(result => {
+    chrome.storage.local.get(['ocbot_pending_message', 'ocbot_load_conversation']).then(result => {
       const text = result.ocbot_pending_message
       if (text && typeof text === 'string') {
         chrome.storage.local.remove('ocbot_pending_message')
         newChat()
         pendingMessageRef.current = text
+        return
+      }
+      const convId = result.ocbot_load_conversation
+      if (convId && typeof convId === 'string') {
+        chrome.storage.local.remove('ocbot_load_conversation')
+        loadConversation(convId)
+        setView('chat')
       }
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pick up pending message when side panel is already open
+  // Pick up pending message or load conversation when side panel is already open
   useEffect(() => {
     const listener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
       if (changes.ocbot_pending_message?.newValue) {
@@ -51,10 +58,16 @@ export function App() {
         newChat()
         pendingMessageRef.current = text
       }
+      if (changes.ocbot_load_conversation?.newValue) {
+        const convId = changes.ocbot_load_conversation.newValue
+        chrome.storage.local.remove('ocbot_load_conversation')
+        loadConversation(convId)
+        setView('chat')
+      }
     }
     chrome.storage.local.onChanged.addListener(listener)
     return () => chrome.storage.local.onChanged.removeListener(listener)
-  }, [newChat])
+  }, [newChat, loadConversation])
 
   const refreshChannelStatuses = useCallback(() => {
     chrome.runtime.sendMessage({ type: 'getChannelStatuses' }, (resp) => {
@@ -89,14 +102,17 @@ export function App() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
-      {view === 'chat' ? (
+      {view !== 'settings' && (
+        <Header
+          view={view === 'chatList' ? 'history' : 'chat'}
+          onOpenSettings={() => setView('settings')}
+          onNewChat={() => { newChat(); setView('chat') }}
+          onToggleHistory={() => setView(v => v === 'chatList' ? 'chat' : 'chatList')}
+          channelStatuses={channelStatuses}
+        />
+      )}
+      {view === 'chat' && (
         <>
-          <Header
-            onOpenSettings={() => setView('settings')}
-            onNewChat={newChat}
-            onOpenChatList={() => setView('chatList')}
-            channelStatuses={channelStatuses}
-          />
           <ChatArea
             hasProvider={!!selectedProvider}
             onOpenSettings={() => setView('settings')}
@@ -117,17 +133,16 @@ export function App() {
             onConfigureLlm={() => setView('settings')}
           />
         </>
-      ) : view === 'chatList' ? (
+      )}
+      {view === 'chatList' && (
         <ChatList
           conversations={conversations}
           activeConversationId={conversationId}
           onSelectChat={handleSelectChat}
-          onPinChat={(id, pinned) => updateConversation(id, { pinned })}
-          onRenameChat={(id, title) => updateConversation(id, { title })}
           onDeleteChat={removeConversation}
-          onClose={() => setView('chat')}
         />
-      ) : (
+      )}
+      {view === 'settings' && (
         <Settings
           providers={providers}
           selectedProvider={selectedProvider}

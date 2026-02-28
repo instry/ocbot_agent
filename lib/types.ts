@@ -26,5 +26,4 @@ export interface Conversation {
   createdAt: number
   updatedAt: number
   title?: string
-  pinned?: boolean
 }

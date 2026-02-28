@@ -105,7 +105,15 @@ export function App() {
 
   return (
     <div className="flex h-screen w-screen bg-background text-foreground">
-      <Sidebar activePage={page} onNavigate={setPage} />
+      <Sidebar
+        activePage={page}
+        onNavigate={setPage}
+        onSelectConversation={async (id) => {
+          await chrome.storage.local.set({ ocbot_load_conversation: id })
+          const { id: windowId } = await chrome.windows.getCurrent()
+          await chrome.sidePanel.open({ windowId: windowId! })
+        }}
+      />
       <main className="flex-1 overflow-hidden">
         {page === 'new-session' && (
           <NewSessionPage

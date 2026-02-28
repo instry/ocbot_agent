@@ -32,8 +32,8 @@ export function useChat(provider: LlmProvider | null) {
   const [toolStatuses, setToolStatuses] = useState<ToolStatus[]>([])
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
-  // Track the current conversation's title/pinned for saving
-  const convMetaRef = useRef<{ title?: string; pinned?: boolean }>({})
+  // Track the current conversation's title for saving
+  const convMetaRef = useRef<{ title?: string }>({})
 
   const refreshConversations = useCallback(async () => {
     const convs = await getConversations()
@@ -41,16 +41,9 @@ export function useChat(provider: LlmProvider | null) {
     return convs
   }, [])
 
-  // Load most recent conversation on mount
   useEffect(() => {
     getConversations().then(convs => {
       setConversations(convs)
-      if (convs.length > 0) {
-        const latest = convs[0]
-        setConversationId(latest.id)
-        setMessages(latest.messages)
-        convMetaRef.current = { title: latest.title, pinned: latest.pinned }
-      }
     })
   }, [])
 
@@ -64,34 +57,26 @@ export function useChat(provider: LlmProvider | null) {
       createdAt: messages[0].createdAt,
       updatedAt: Date.now(),
       title,
-      pinned: convMetaRef.current.pinned,
     }
     saveConversation(conv).then(() => refreshConversations())
   }, [messages, conversationId, refreshConversations])
 
-  const loadConversation = useCallback((id: string) => {
-    const conv = conversations.find(c => c.id === id)
-    if (!conv) return
+  const loadConversation = useCallback(async (id: string) => {
+    let conv = conversations.find(c => c.id === id)
+    if (!conv) {
+      // conversations state may not be populated yet (race on mount)
+      const all = await getConversations()
+      conv = all.find(c => c.id === id)
+      if (!conv) return
+      setConversations(all)
+    }
     setConversationId(conv.id)
     setMessages(conv.messages)
-    convMetaRef.current = { title: conv.title, pinned: conv.pinned }
+    convMetaRef.current = { title: conv.title }
     setStreamingText('')
     setToolStatuses([])
     setError(null)
   }, [conversations])
-
-  const updateConversation = useCallback(async (id: string, partial: { title?: string; pinned?: boolean }) => {
-    const convs = await getConversations()
-    const conv = convs.find(c => c.id === id)
-    if (!conv) return
-    const updated = { ...conv, ...partial, updatedAt: Date.now() }
-    await saveConversation(updated)
-    // If updating the active conversation, sync meta ref
-    if (id === conversationId) {
-      convMetaRef.current = { title: updated.title, pinned: updated.pinned }
-    }
-    await refreshConversations()
-  }, [conversationId, refreshConversations])
 
   const removeConversation = useCallback(async (id: string) => {
     await deleteConversation(id)
@@ -102,7 +87,7 @@ export function useChat(provider: LlmProvider | null) {
         const next = convs[0]
         setConversationId(next.id)
         setMessages(next.messages)
-        convMetaRef.current = { title: next.title, pinned: next.pinned }
+        convMetaRef.current = { title: next.title }
       } else {
         setMessages([])
         setConversationId(`conv_${Date.now()}`)
@@ -251,7 +236,6 @@ export function useChat(provider: LlmProvider | null) {
     stopAgent,
     newChat,
     loadConversation,
-    updateConversation,
     removeConversation,
   }
 }

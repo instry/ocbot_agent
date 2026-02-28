@@ -11,7 +11,7 @@ export function ChatPage() {
   const {
     messages, conversationId, conversations, streamingText, isLoading,
     toolStatuses, error, sendMessage, stopAgent, newChat,
-    loadConversation, updateConversation, removeConversation,
+    loadConversation, removeConversation,
   } = useChat(selectedProvider)
   const [showChatList, setShowChatList] = useState(false)
 
@@ -21,10 +21,7 @@ export function ChatPage() {
         conversations={conversations}
         activeConversationId={conversationId}
         onSelectChat={(id) => { loadConversation(id); setShowChatList(false) }}
-        onPinChat={(id, pinned) => updateConversation(id, { pinned })}
-        onRenameChat={(id, title) => updateConversation(id, { title })}
         onDeleteChat={removeConversation}
-        onClose={() => setShowChatList(false)}
       />
     )
   }
