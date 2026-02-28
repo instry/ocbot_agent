@@ -127,12 +127,12 @@ async function getActiveTabId(): Promise<number> {
 }
 
 async function toolNavigate(args: { url: string }): Promise<string> {
-  const tabId = await getActiveTabId()
   let url = args.url
   if (!/^https?:\/\//i.test(url)) {
     url = 'https://' + url
   }
-  await chrome.tabs.update(tabId, { url })
+  const newTab = await chrome.tabs.create({ url })
+  const tabId = newTab.id!
   await new Promise<void>((resolve) => {
     const listener = (id: number, info: chrome.tabs.TabChangeInfo) => {
       if (id === tabId && info.status === 'complete') {
