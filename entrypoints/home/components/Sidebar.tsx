@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { SquarePen, Puzzle, Smartphone, Settings, Trash2, Loader2 } from 'lucide-react'
+import { SquarePen, Puzzle, Smartphone, Settings } from 'lucide-react'
 import { BotAvatar } from '@/components/BotAvatar'
+import { ChatList } from '@/components/ChatList'
 import { getConversations, deleteConversation } from '@/lib/storage'
 import type { Conversation } from '@/lib/types'
 
@@ -12,8 +13,6 @@ interface SidebarProps {
   onSelectConversation: (id: string) => void
 }
 
-const PAGE_SIZE = 20
-
 const bottomNavItems: { id: Page; label: string; icon: typeof Puzzle }[] = [
   { id: 'skills', label: 'Skills', icon: Puzzle },
   { id: 'remote', label: 'Remote', icon: Smartphone },
@@ -22,8 +21,6 @@ const bottomNavItems: { id: Page; label: string; icon: typeof Puzzle }[] = [
 
 export function Sidebar({ activePage, onNavigate, onSelectConversation }: SidebarProps) {
   const [conversations, setConversations] = useState<Conversation[]>([])
-  const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
-  const [loadingMore, setLoadingMore] = useState(false)
 
   const refresh = useCallback(async () => {
     const convs = await getConversations()
@@ -45,17 +42,6 @@ export function Sidebar({ activePage, onNavigate, onSelectConversation }: Sideba
     await deleteConversation(id)
     await refresh()
   }
-
-  const handleLoadMore = () => {
-    setLoadingMore(true)
-    setTimeout(() => {
-      setDisplayCount(prev => prev + PAGE_SIZE)
-      setLoadingMore(false)
-    }, 0)
-  }
-
-  const visible = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, displayCount)
-  const hasMore = conversations.length > displayCount
 
   return (
     <aside className="flex h-full w-56 flex-col border-r border-border/40 bg-muted/30">
@@ -80,39 +66,11 @@ export function Sidebar({ activePage, onNavigate, onSelectConversation }: Sideba
       </div>
 
       {/* Conversation history */}
-      <div className="flex-1 overflow-y-auto px-2">
-        {visible.length > 0 && (
-          <div className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
-            History
-          </div>
-        )}
-        {visible.map(conv => (
-          <div
-            key={conv.id}
-            className="group flex cursor-pointer items-center gap-1 rounded-lg px-3 py-1.5 text-sm transition-colors hover:bg-muted/80"
-            onClick={() => onSelectConversation(conv.id)}
-          >
-            <div className="min-w-0 flex-1 truncate text-foreground/80">
-              {conv.title || 'New Chat'}
-            </div>
-            <button
-              onClick={e => { e.stopPropagation(); handleDelete(conv.id) }}
-              className="shrink-0 cursor-pointer rounded p-0.5 text-muted-foreground/40 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-            >
-              <Trash2 className="h-3 w-3" />
-            </button>
-          </div>
-        ))}
-        {hasMore && (
-          <button
-            onClick={handleLoadMore}
-            disabled={loadingMore}
-            className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {loadingMore ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Load more'}
-          </button>
-        )}
-      </div>
+      <ChatList
+        conversations={conversations}
+        onSelectChat={onSelectConversation}
+        onDeleteChat={handleDelete}
+      />
 
       {/* Bottom nav */}
       <nav className="space-y-0.5 border-t border-border/40 px-2 py-2">

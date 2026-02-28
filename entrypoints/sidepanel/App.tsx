@@ -105,10 +105,9 @@ export function App() {
       {view !== 'settings' && (
         <Header
           view={view === 'chatList' ? 'history' : 'chat'}
-          onOpenSettings={() => setView('settings')}
           onNewChat={() => { newChat(); setView('chat') }}
           onToggleHistory={() => setView(v => v === 'chatList' ? 'chat' : 'chatList')}
-          channelStatuses={channelStatuses}
+          onClose={() => window.close()}
         />
       )}
       {view === 'chat' && (
