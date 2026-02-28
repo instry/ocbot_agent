@@ -478,6 +478,19 @@ export const MOCK_SKILLS: Skill[] = [
   },
 ]
 
+/** IDs of skills the user has "cloned" (mock data) */
+export const MOCK_MY_SKILLS_IDS = [
+  'linkedin-outreach',
+  'google-maps-scraper',
+  'price-monitor',
+  'coupon-finder',
+]
+
+/** Return the Skill objects the user has cloned */
+export function getMySkills(): Skill[] {
+  return MOCK_MY_SKILLS_IDS.map((id) => MOCK_SKILLS.find((s) => s.id === id)!).filter(Boolean)
+}
+
 const MOCK_SKILL_DETAILS: Record<string, Omit<SkillDetail, keyof Skill>> = {
   'linkedin-outreach': {
     longDescription: `Automate your LinkedIn outreach at scale without sacrificing personalization.\n\nThis skill visits prospect profiles, sends customized connection requests based on configurable templates, and queues follow-up messages after acceptance. It respects LinkedIn's daily limits and randomizes timing to mimic human behavior.\n\n**Key features:**\n- Template variables: \`{{firstName}}\`, \`{{company}}\`, \`{{title}}\`\n- Smart delay between actions (configurable)\n- Auto-withdraw pending requests older than N days\n- CSV import for prospect lists\n- Detailed delivery report with accept/ignore/pending stats`,

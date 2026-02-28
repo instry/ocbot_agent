@@ -17,7 +17,7 @@ function formatCount(n: number): string {
   return n.toString()
 }
 
-export function SkillDetailPage({ skill, onBack }: { skill: Skill; onBack: () => void }) {
+export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplace' }: { skill: Skill; onBack: () => void; backLabel?: string }) {
   const detail = getSkillDetail(skill.id)
   if (!detail) return null
 
@@ -29,7 +29,7 @@ export function SkillDetailPage({ skill, onBack }: { skill: Skill; onBack: () =>
         className="flex cursor-pointer items-center gap-1.5 border-b border-border/40 px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Marketplace
+        {backLabel}
       </button>
 
       <div className="flex flex-col gap-8 p-6">

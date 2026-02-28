@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
-import { Search, ArrowRight, ChevronLeft, ChevronRight, BadgeCheck, GitFork } from 'lucide-react'
-import { MOCK_SKILLS, getSkillAbbr, type Skill } from '../data/skills'
+import { Search, ChevronLeft, ChevronRight, BadgeCheck, GitFork } from 'lucide-react'
+import { MOCK_SKILLS, getSkillAbbr, getMySkills, type Skill } from '../data/skills'
 import { SkillDetailPage } from './SkillDetailPage'
 
 const CATEGORIES = [
@@ -93,12 +93,15 @@ export function SkillsPage() {
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [page, setPage] = useState(1)
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
+  const [activeTab, setActiveTab] = useState<'marketplace' | 'my-skills'>('marketplace')
   const PAGE_SIZE = 30
+
+  const mySkills = useMemo(() => getMySkills(), [])
 
   const filtered = useMemo(() => {
     setPage(1)
-    let skills = MOCK_SKILLS
-    if (selectedCategory !== 'All') {
+    let skills = activeTab === 'my-skills' ? mySkills : MOCK_SKILLS
+    if (activeTab === 'marketplace' && selectedCategory !== 'All') {
       skills = skills.filter((s) => s.categories.includes(selectedCategory))
     }
     if (query.trim()) {
@@ -110,32 +113,57 @@ export function SkillsPage() {
       )
     }
     return skills
-  }, [query, selectedCategory])
+  }, [query, selectedCategory, activeTab, mySkills])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   if (selectedSkill) {
-    return <SkillDetailPage skill={selectedSkill} onBack={() => setSelectedSkill(null)} />
+    return (
+      <SkillDetailPage
+        skill={selectedSkill}
+        onBack={() => setSelectedSkill(null)}
+        backLabel={activeTab === 'my-skills' ? 'Back to My Skills' : 'Back to Marketplace'}
+      />
+    )
   }
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">
-            Skill Marketplace
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Discover and clone community-built browser automation skills. Or,{' '}
-            <span className="underline underline-offset-2">
-              create your own
-            </span>
-            .
-          </p>
-        </div>
-        <button className="flex cursor-pointer items-center gap-1 rounded-lg border border-border/60 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground">
-          My Skills <ArrowRight className="h-3.5 w-3.5" />
+      <div>
+        <h1 className="text-2xl font-semibold text-foreground">
+          Skills
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Discover and clone skills. Or,{' '}
+          <span className="cursor-pointer font-medium text-primary underline underline-offset-2 transition-colors hover:text-primary/80">
+            create your own
+          </span>
+          .
+        </p>
+      </div>
+
+      {/* Tab toggle */}
+      <div className="mt-4 flex gap-4 border-b border-border/40">
+        <button
+          onClick={() => setActiveTab('marketplace')}
+          className={`cursor-pointer pb-2 text-sm transition-colors ${
+            activeTab === 'marketplace'
+              ? 'border-b-2 border-primary font-semibold text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Marketplace
+        </button>
+        <button
+          onClick={() => setActiveTab('my-skills')}
+          className={`cursor-pointer pb-2 text-sm transition-colors ${
+            activeTab === 'my-skills'
+              ? 'border-b-2 border-primary font-semibold text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          My Skills ({mySkills.length})
         </button>
       </div>
 
@@ -150,69 +178,81 @@ export function SkillsPage() {
         />
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {CATEGORIES.map((cat) => (
-          <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
-            className={`cursor-pointer rounded-full border px-3 py-1 text-xs transition-colors ${
-              selectedCategory === cat
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border/60 text-muted-foreground hover:border-border hover:text-foreground'
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
+      {activeTab === 'marketplace' && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`cursor-pointer rounded-full border px-3 py-1 text-xs transition-colors ${
+                selectedCategory === cat
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border/60 text-muted-foreground hover:border-border hover:text-foreground'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="mt-4 text-sm font-medium text-muted-foreground">
-        {selectedCategory === 'All' ? 'All Skills' : selectedCategory} ({filtered.length})
+        {activeTab === 'my-skills'
+          ? `My Skills (${filtered.length})`
+          : `${selectedCategory === 'All' ? 'All Skills' : selectedCategory} (${filtered.length})`}
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-4">
-        {paged.map((skill) => (
-          <SkillCard key={skill.id} skill={skill} onClick={() => setSelectedSkill(skill)} />
-        ))}
-      </div>
-
-      {totalPages > 1 && (
-        <div className="mt-6 flex flex-col items-center gap-2 pb-2">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="flex cursor-pointer items-center gap-1 rounded-lg border border-border/60 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground disabled:opacity-30"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Previous
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-              <button
-                key={n}
-                onClick={() => setPage(n)}
-                className={`min-w-[36px] cursor-pointer rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                  n === page
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-muted/80 hover:text-foreground'
-                }`}
-              >
-                {n}
-              </button>
-            ))}
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="flex cursor-pointer items-center gap-1 rounded-lg border border-border/60 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground disabled:opacity-30"
-            >
-              Next
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} skills
-          </span>
+      {activeTab === 'my-skills' && filtered.length === 0 ? (
+        <div className="mt-8 flex flex-col items-center gap-2 text-sm text-muted-foreground">
+          <p>No skills cloned yet. Browse the Marketplace to find skills.</p>
         </div>
+      ) : (
+        <>
+          <div className="mt-3 grid grid-cols-3 gap-4">
+            {paged.map((skill) => (
+              <SkillCard key={skill.id} skill={skill} onClick={() => setSelectedSkill(skill)} />
+            ))}
+          </div>
+
+          {activeTab === 'marketplace' && totalPages > 1 && (
+            <div className="mt-6 flex flex-col items-center gap-2 pb-2">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="flex cursor-pointer items-center gap-1 rounded-lg border border-border/60 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground disabled:opacity-30"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setPage(n)}
+                    className={`min-w-[36px] cursor-pointer rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                      n === page
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="flex cursor-pointer items-center gap-1 rounded-lg border border-border/60 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground disabled:opacity-30"
+                >
+                  Next
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} skills
+              </span>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
