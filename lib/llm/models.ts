@@ -1,4 +1,4 @@
-import type { ProviderTemplate } from './types'
+import type { LlmProvider, ProviderTemplate } from './types'
 
 export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
   {
@@ -127,4 +127,10 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
 
 export function getTemplateByType(type: string): ProviderTemplate | undefined {
   return PROVIDER_TEMPLATES.find(t => t.type === type)
+}
+
+export function getModelDisplayName(provider: LlmProvider): string {
+  const template = PROVIDER_TEMPLATES.find(t => t.type === provider.type)
+  const model = template?.models.find(m => m.id === provider.modelId)
+  return model?.name ?? provider.modelId ?? provider.name
 }

@@ -63,9 +63,6 @@ export function ChatArea({ hasProvider, onOpenSettings, messages, streamingText,
               </div>
               <div>
                 <h2 className="mb-1 text-lg font-semibold">How can I help?</h2>
-                <p className="text-xs text-muted-foreground max-w-[200px]">
-                  I can browse the web, find information, and complete tasks for you
-                </p>
               </div>
             </>
           ) : (
