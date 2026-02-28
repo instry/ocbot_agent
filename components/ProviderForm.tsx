@@ -39,8 +39,7 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
 
   const buildName = (tmpl: ReturnType<typeof getTemplateByType>, regionId: string) => {
     const base = tmpl?.name ?? ''
-    const r = tmpl?.regions?.find(r => r.id === regionId)
-    return r ? `${base} (${r.label})` : base
+    return regionId === 'cn' ? `${base}-CN` : base
   }
 
   const handleTypeChange = (type: ProviderType) => {
