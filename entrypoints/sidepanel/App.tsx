@@ -125,6 +125,8 @@ export function App() {
             providers={providers}
             selectedProvider={selectedProvider}
             onSelectProvider={selectProvider}
+            onSaveProvider={saveProvider}
+            onDeleteProvider={deleteProvider}
           />
         </>
       )}

@@ -1,4 +1,4 @@
-export type ProviderType = 'openai' | 'anthropic' | 'google' | 'openrouter' | 'deepseek' | 'qwen' | 'kimi' | 'glm' | 'minimax' | 'openai-compatible'
+export type ProviderType = 'openai' | 'anthropic' | 'google' | 'openrouter' | 'deepseek' | 'qwen' | 'kimi' | 'glm' | 'minimax' | 'xai' | 'arcee' | 'local' | 'openai-compatible'
 
 export interface ModelInfo {
   id: string

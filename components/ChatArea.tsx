@@ -55,18 +55,7 @@ export function ChatArea({ hasProvider, messages, streamingText, isLoading, tool
     return (
       <main className="flex-1 overflow-y-auto">
         <div className="flex h-full flex-col items-center justify-center space-y-4 text-center px-4">
-          {hasProvider ? (
-            <WelcomeHero size="sm" />
-          ) : (
-            <>
-              <div>
-                <h2 className="mb-1 text-lg font-semibold">No provider configured</h2>
-                <p className="text-xs text-muted-foreground max-w-[260px]">
-                  Configure a provider in Settings to start chatting.
-                </p>
-              </div>
-            </>
-          )}
+          <WelcomeHero size="sm" />
         </div>
       </main>
     )

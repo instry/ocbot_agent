@@ -22,15 +22,17 @@ const SUGGESTION_CHIPS = [
 ]
 
 function NewSessionPage({
-  onNavigate,
   providers,
   selectedProvider,
   selectProvider,
+  saveProvider,
+  deleteProvider,
 }: {
-  onNavigate: (page: Page) => void
   providers: LlmProvider[]
   selectedProvider: LlmProvider | null
   selectProvider: (id: string) => Promise<void>
+  saveProvider: (provider: LlmProvider) => Promise<void>
+  deleteProvider: (id: string) => Promise<void>
 }) {
   const chatInputRef = useRef<ChatInputHandle>(null)
 
@@ -53,6 +55,8 @@ function NewSessionPage({
           providers={providers}
           selectedProvider={selectedProvider}
           onSelectProvider={selectProvider}
+          onSaveProvider={saveProvider}
+          onDeleteProvider={deleteProvider}
         />
         <div className="flex flex-wrap justify-center gap-2">
           {SUGGESTION_CHIPS.map((chip) => (
@@ -73,7 +77,7 @@ function NewSessionPage({
 export function App() {
   const [page, setPage] = useState<Page>(() => {
     const hash = window.location.hash.replace('#/', '')
-    if (hash === 'skills' || hash === 'remote' || hash === 'settings' || hash === 'about') return hash
+    if (['skills', 'remote', 'settings', 'about'].includes(hash)) return hash as Page
     return 'new-session'
   })
   const { providers, selectedProvider, saveProvider, deleteProvider, selectProvider } = useLlmProvider()
@@ -119,10 +123,11 @@ export function App() {
       <main className="flex-1 overflow-hidden">
         {page === 'new-session' && (
           <NewSessionPage
-            onNavigate={setPage}
             providers={providers}
             selectedProvider={selectedProvider}
             selectProvider={selectProvider}
+            saveProvider={saveProvider}
+            deleteProvider={deleteProvider}
           />
         )}
         {page === 'skills' && <SkillsPage />}
