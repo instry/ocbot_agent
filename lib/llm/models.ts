@@ -170,7 +170,9 @@ export function getTemplateByType(type: string): ProviderTemplate | undefined {
 export function getModelDisplayName(provider: LlmProvider): string {
   const template = PROVIDER_TEMPLATES.find(t => t.type === provider.type)
   const model = template?.models.find(m => m.id === provider.modelId)
-  return model?.name ?? provider.modelId ?? provider.name
+  const baseName = model?.name ?? provider.modelId ?? provider.name
+  const isCn = template?.regions?.some(r => r.id === 'cn' && r.baseUrl === provider.baseUrl)
+  return isCn ? `${baseName}-CN` : baseName
 }
 
 export function getRegionBaseUrl(template: ProviderTemplate, region: string): string {

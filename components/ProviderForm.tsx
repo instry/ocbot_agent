@@ -16,7 +16,6 @@ interface ProviderFormProps {
 export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }: ProviderFormProps) {
   const initTemplate = getTemplateByType(initial?.type ?? 'google')
   const [providerType, setProviderType] = useState<ProviderType>(initial?.type ?? 'google')
-  const [name, setName] = useState(initial?.name ?? initTemplate?.name ?? '')
   const [apiKey, setApiKey] = useState(initial?.apiKey ?? '')
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? initTemplate?.defaultBaseUrl ?? '')
   const [region, setRegion] = useState<string>(() => {
@@ -37,10 +36,7 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
   const template = getTemplateByType(providerType)
   const isCustom = providerType === 'openai-compatible' || providerType === 'local'
 
-  const buildName = (tmpl: ReturnType<typeof getTemplateByType>, regionId: string) => {
-    const base = tmpl?.name ?? ''
-    return regionId === 'cn' ? `${base}-CN` : base
-  }
+  const providerName = region === 'cn' ? `${template?.name ?? providerType}-CN` : (template?.name ?? providerType)
 
   const handleTypeChange = (type: ProviderType) => {
     setProviderType(type)
@@ -48,7 +44,6 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
     if (!initial) {
       const defaultRegion = tmpl?.regions?.[0]
       setRegion(defaultRegion?.id ?? '')
-      setName(buildName(tmpl, defaultRegion?.id ?? ''))
       setBaseUrl(defaultRegion?.baseUrl ?? tmpl?.defaultBaseUrl ?? '')
       const defaultId = tmpl?.defaultModelId ?? ''
       setModelIds(defaultId ? new Set([defaultId]) : new Set())
@@ -60,10 +55,7 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
   const handleRegionChange = (regionId: string) => {
     setRegion(regionId)
     const r = template?.regions?.find(r => r.id === regionId)
-    if (r) {
-      setBaseUrl(r.baseUrl)
-      setName(buildName(template, regionId))
-    }
+    if (r) setBaseUrl(r.baseUrl)
   }
 
   const toggleModel = (id: string) => {
@@ -87,7 +79,7 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
         await onSave({
           id: initial.id,
           type: providerType,
-          name: name.trim() || template?.name || providerType,
+          name: providerName,
           apiKey: apiKey.trim(),
           baseUrl: baseUrl.trim() || undefined,
           modelId: modelId.trim(),
@@ -104,7 +96,7 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
           await onSave({
             id: crypto.randomUUID(),
             type: providerType,
-            name: name.trim() || template?.name || providerType,
+            name: providerName,
             apiKey: apiKey.trim(),
             baseUrl: baseUrl.trim() || undefined,
             modelId: mid,
@@ -168,18 +160,6 @@ export function ProviderForm({ initial, onSave, onCancel, hideCancel, compact }:
           </div>
         </fieldset>
       )}
-
-      {/* Name */}
-      <fieldset>
-        <label className="mb-2 block text-sm font-medium">Display Name</label>
-        <input
-          type="text"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder={template?.name}
-          className="w-full rounded-xl border border-border/50 bg-muted/50 px-4 py-2.5 text-sm outline-none transition-colors hover:border-border focus:border-primary"
-        />
-      </fieldset>
 
       {/* API Key */}
       <fieldset>
