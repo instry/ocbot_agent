@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Search, ChevronLeft, ChevronRight, BadgeCheck, GitFork } from 'lucide-react'
-import { MOCK_SKILLS, getSkillAbbr, getMySkills, type Skill } from '../data/skills'
+import { MOCK_SKILLS, getSkillAbbr, getLocalSkills, deleteLocalSkill, type Skill } from '../data/skills'
 import { SkillDetailPage } from './SkillDetailPage'
 
 const CATEGORIES = [
@@ -96,7 +96,20 @@ export function SkillsPage() {
   const [activeTab, setActiveTab] = useState<'marketplace' | 'my-skills'>('marketplace')
   const PAGE_SIZE = 30
 
-  const mySkills = useMemo(() => getMySkills(), [])
+  const [mySkills, setMySkills] = useState<Skill[]>([])
+
+  useEffect(() => {
+    getLocalSkills().then(setMySkills)
+  }, [])
+
+  const refreshMySkills = useCallback(() => {
+    getLocalSkills().then(setMySkills)
+  }, [])
+
+  const handleDeleteSkill = useCallback(async (id: string) => {
+    await deleteLocalSkill(id)
+    refreshMySkills()
+  }, [refreshMySkills])
 
   const filtered = useMemo(() => {
     setPage(1)
@@ -124,6 +137,7 @@ export function SkillsPage() {
         skill={selectedSkill}
         onBack={() => setSelectedSkill(null)}
         backLabel={activeTab === 'my-skills' ? 'Back to My Skills' : 'Back to Marketplace'}
+        onDelete={activeTab === 'my-skills' ? handleDeleteSkill : undefined}
       />
     )
   }
@@ -204,7 +218,7 @@ export function SkillsPage() {
 
       {activeTab === 'my-skills' && filtered.length === 0 ? (
         <div className="mt-8 flex flex-col items-center gap-2 text-sm text-muted-foreground">
-          <p>No skills cloned yet. Browse the Marketplace to find skills.</p>
+          <p>No skills yet. Complete a task in the sidepanel, then save it as a Skill.</p>
         </div>
       ) : (
         <>

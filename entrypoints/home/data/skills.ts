@@ -599,3 +599,62 @@ export function getSkillDetail(id: string): SkillDetail | null {
     updatedAt: '2025-09-01',
   }
 }
+
+import { SkillStore } from '@/lib/skills/store'
+import type { Skill as RealSkill } from '@/lib/skills/types'
+
+// Convert internal Skill to display Skill format
+export function toDisplaySkill(real: RealSkill): Skill {
+  return {
+    id: real.id,
+    name: real.name,
+    description: real.description,
+    categories: real.categories,
+    installs: real.totalRuns,
+    version: `v${real.version}`,
+    official: false,
+    author: real.author,
+  }
+}
+
+// Convert internal Skill to display SkillDetail format
+export function toDisplaySkillDetail(real: RealSkill): SkillDetail {
+  return {
+    ...toDisplaySkill(real),
+    longDescription: real.skillMd || real.description,
+    screenshots: [],
+    changelog: [],
+    parameters: real.parameters.map(p => ({
+      name: p.name,
+      type: p.type,
+      description: p.description,
+      required: p.required,
+      default: p.default,
+      options: p.options,
+    })),
+    compatibleSites: real.startUrl ? [new URL(real.startUrl).hostname] : [],
+    rating: real.score * 5,
+    reviewCount: 0,
+    runCount: real.totalRuns,
+    updatedAt: new Date(real.updatedAt).toISOString().slice(0, 10),
+  }
+}
+
+const skillStoreInstance = new SkillStore()
+
+export async function getLocalSkills(): Promise<Skill[]> {
+  const skills = await skillStoreInstance.list()
+  return skills.map(toDisplaySkill)
+}
+
+export async function getLocalSkillDetail(id: string): Promise<SkillDetail | null> {
+  const skill = await skillStoreInstance.get(id)
+  if (!skill) return null
+  return toDisplaySkillDetail(skill)
+}
+
+export async function deleteLocalSkill(id: string): Promise<void> {
+  await skillStoreInstance.delete(id)
+}
+
+export { skillStoreInstance }

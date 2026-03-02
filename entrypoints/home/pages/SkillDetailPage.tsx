@@ -1,5 +1,6 @@
-import { ArrowLeft, Star, GitFork, BadgeCheck, Play, Download, ImageOff } from 'lucide-react'
-import { getSkillDetail, getSkillAbbr, type Skill, type SkillDetail } from '../data/skills'
+import { useState, useEffect } from 'react'
+import { ArrowLeft, Star, GitFork, BadgeCheck, Play, Download, ImageOff, Trash2 } from 'lucide-react'
+import { getSkillDetail, getLocalSkillDetail, getSkillAbbr, type Skill, type SkillDetail } from '../data/skills'
 
 function DetailIcon({ detail, className = 'h-16 w-16' }: { detail: SkillDetail; className?: string }) {
   if (detail.iconUrl) {
@@ -17,8 +18,23 @@ function formatCount(n: number): string {
   return n.toString()
 }
 
-export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplace' }: { skill: Skill; onBack: () => void; backLabel?: string }) {
-  const detail = getSkillDetail(skill.id)
+export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplace', onRun, onDelete }: {
+  skill: Skill; onBack: () => void; backLabel?: string;
+  onRun?: (skill: Skill) => void;
+  onDelete?: (skillId: string) => void
+}) {
+  const [detail, setDetail] = useState<SkillDetail | null>(null)
+
+  useEffect(() => {
+    getLocalSkillDetail(skill.id).then(local => {
+      if (local) {
+        setDetail(local)
+      } else {
+        setDetail(getSkillDetail(skill.id))
+      }
+    })
+  }, [skill.id])
+
   if (!detail) return null
 
   return (
@@ -74,10 +90,22 @@ export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplac
               <Download className="h-4 w-4" />
               Clone
             </button>
-            <button className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/60 px-5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/80">
+            <button
+              onClick={() => onRun?.(skill)}
+              className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/60 px-5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/80"
+            >
               <Play className="h-4 w-4" />
               Run
             </button>
+            {onDelete && (
+              <button
+                onClick={() => { onDelete(skill.id); onBack() }}
+                className="flex cursor-pointer items-center gap-2 rounded-xl border border-red-500/30 px-5 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-500/10"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </button>
+            )}
           </div>
         </div>
 
