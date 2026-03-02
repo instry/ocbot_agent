@@ -12,6 +12,10 @@ import {
   replayAgentSteps,
   getConfigSignature,
 } from './agentCache'
+import { matchSkill } from '@/lib/skills/matcher'
+import { SkillStore } from '@/lib/skills/store'
+import { SkillRunner } from '@/lib/skills/runner'
+import type { SkillMatch } from '@/lib/skills/types'
 
 const MAX_TURNS = 100
 
@@ -22,6 +26,8 @@ export interface AgentCallbacks {
   onAssistantMessage: (content: string, toolCalls: ToolCallPart[]) => void
   onToolMessage: (toolCallId: string, name: string, result: string) => void
   onError: (error: string) => void
+  onSkillMatch?: (match: SkillMatch) => Promise<boolean> // return true to execute skill
+  onRecordedSteps?: (steps: AgentReplayStep[], instruction: string, startUrl: string) => void
 }
 
 async function getPageContext(): Promise<{ url: string; title: string } | undefined> {
@@ -55,6 +61,53 @@ export async function runAgentLoop(
   const startUrl = pageContext?.url || ''
   const varKeys = variables ? variableKeysForCache(variables) : []
   const configSig = getConfigSignature(provider)
+
+  // --- Skill matching (before agentCache) ---
+  if (userInstruction) {
+    const skillStore = new SkillStore()
+    const skillMatch = await matchSkill(
+      userInstruction,
+      startUrl,
+      provider,
+      skillStore,
+      signal,
+    )
+
+    if (skillMatch && callbacks.onSkillMatch) {
+      const shouldRun = await callbacks.onSkillMatch(skillMatch)
+      if (shouldRun) {
+        const runner = new SkillRunner(skillStore)
+        const result = await runner.execute(
+          skillMatch.skill,
+          variables ?? {},
+          provider,
+          cache!,
+          {
+            onStepStart: (i, step) => callbacks.onToolCallStart(`skill-step-${i}`, step.type),
+            onStepEnd: (i, step, res) => callbacks.onToolCallEnd(`skill-step-${i}`, step.type, res),
+            onTrackSwitch: () => {},
+            onHeal: () => {},
+            onTextDelta: callbacks.onTextDelta,
+          },
+          signal,
+          variables,
+        )
+
+        if (result.success) {
+          callbacks.onTextDelta(
+            `Skill "${skillMatch.skill.name}" completed successfully (${result.track} track, ${result.durationMs}ms).`,
+          )
+          callbacks.onAssistantMessage(
+            `Skill "${skillMatch.skill.name}" completed successfully (${result.track} track, ${result.durationMs}ms).`,
+            [],
+          )
+          return
+        }
+        // Skill failed — fall through to normal agent loop
+        console.log('[ocbot] Skill execution failed, falling back to agent loop')
+      }
+    }
+  }
 
   // --- Agent cache replay ---
   if (agentCache && userInstruction) {
@@ -174,6 +227,10 @@ export async function runAgentLoop(
       if (agentCache && userInstruction && recordedSteps.length > 0) {
         await agentCache.store(userInstruction, startUrl, varKeys, configSig, recordedSteps)
       }
+      // Expose recorded steps for "Save as Skill"
+      if (recordedSteps.length > 0 && userInstruction && callbacks.onRecordedSteps) {
+        callbacks.onRecordedSteps(recordedSteps, userInstruction, startUrl)
+      }
       return
     }
 
@@ -203,6 +260,9 @@ export async function runAgentLoop(
   // Safety limit reached — store what we have and send final message
   if (agentCache && userInstruction && recordedSteps.length > 0) {
     await agentCache.store(userInstruction, startUrl, varKeys, configSig, recordedSteps)
+  }
+  if (recordedSteps.length > 0 && userInstruction && callbacks.onRecordedSteps) {
+    callbacks.onRecordedSteps(recordedSteps, userInstruction, startUrl)
   }
   callbacks.onAssistantMessage('I\'ve completed the actions I could perform. Let me know if you need anything else.', [])
 }
