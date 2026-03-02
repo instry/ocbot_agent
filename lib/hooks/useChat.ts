@@ -1,9 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { ChatMessage, Conversation } from '@/lib/types'
 import type { LlmProvider, LlmRequestMessage } from '@/lib/llm/types'
+import type { AgentReplayStep } from '@/lib/agent/agentCache'
 import { runAgentLoop } from '@/lib/agent/loop'
 import { ActCache } from '@/lib/agent/cache'
 import { AgentCache } from '@/lib/agent/agentCache'
+import { createSkillFromExecution } from '@/lib/skills/create'
+import { SkillStore } from '@/lib/skills/store'
 import { saveConversation, getConversations, deleteConversation } from '@/lib/storage'
 
 export interface ToolStatus {
@@ -31,6 +34,11 @@ export function useChat(provider: LlmProvider | null) {
   const [isLoading, setIsLoading] = useState(false)
   const [toolStatuses, setToolStatuses] = useState<ToolStatus[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [pendingSkillSave, setPendingSkillSave] = useState<{
+    steps: AgentReplayStep[]
+    instruction: string
+    startUrl: string
+  } | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   // Track the current conversation's title for saving
   const convMetaRef = useRef<{ title?: string }>({})
@@ -193,6 +201,9 @@ export function useChat(provider: LlmProvider | null) {
           onError: (error) => {
             setError(error)
           },
+          onRecordedSteps: (steps, instruction, startUrl) => {
+            setPendingSkillSave({ steps, instruction, startUrl })
+          },
         },
         abortController.signal,
         actCache,
@@ -222,6 +233,21 @@ export function useChat(provider: LlmProvider | null) {
     setStreamingText('')
     setToolStatuses([])
     setError(null)
+    setPendingSkillSave(null)
+  }, [])
+
+  const saveAsSkill = useCallback(async () => {
+    if (!pendingSkillSave || !provider) return
+    const { steps, instruction, startUrl } = pendingSkillSave
+    const skill = await createSkillFromExecution(instruction, steps, startUrl, provider)
+    const store = new SkillStore()
+    await store.save(skill)
+    setPendingSkillSave(null)
+    return skill
+  }, [pendingSkillSave, provider])
+
+  const dismissSkillSave = useCallback(() => {
+    setPendingSkillSave(null)
   }, [])
 
   return {
@@ -237,5 +263,8 @@ export function useChat(provider: LlmProvider | null) {
     newChat,
     loadConversation,
     removeConversation,
+    pendingSkillSave,
+    saveAsSkill,
+    dismissSkillSave,
   }
 }

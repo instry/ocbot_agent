@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Puzzle } from 'lucide-react'
 import { ChatArea } from '@/components/ChatArea'
 import { ChatInput } from '@/components/ChatInput'
 import type { ChatInputHandle } from '@/components/ChatInput'
@@ -18,8 +19,11 @@ export function App() {
     messages, conversationId, conversations, streamingText, isLoading,
     toolStatuses, error, sendMessage, stopAgent, newChat,
     loadConversation, removeConversation,
+    pendingSkillSave, saveAsSkill, dismissSkillSave,
   } = useChat(selectedProvider)
   const [channelStatuses, setChannelStatuses] = useState<Record<string, ChannelStatus>>({})
+  const [skillSaving, setSkillSaving] = useState(false)
+  const [skillSaved, setSkillSaved] = useState(false)
   const pendingMessageRef = useRef<string | null>(null)
   const chatInputRef = useRef<ChatInputHandle>(null)
 
@@ -106,7 +110,7 @@ export function App() {
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
       <Header
         view={view === 'chatList' ? 'history' : 'chat'}
-        onNewChat={() => { newChat(); setView('chat') }}
+        onNewChat={() => { newChat(); setView('chat'); setSkillSaved(false) }}
         onToggleHistory={() => setView(v => v === 'chatList' ? 'chat' : 'chatList')}
         onClose={() => window.close()}
       />
@@ -120,6 +124,39 @@ export function App() {
             toolStatuses={toolStatuses}
             error={error}
           />
+          {pendingSkillSave && !skillSaved && (
+            <div className="mx-3 my-2 flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
+              <Puzzle className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="flex-1 text-sm text-muted-foreground">Save this task as a Skill?</span>
+              <button
+                disabled={skillSaving}
+                onClick={async () => {
+                  setSkillSaving(true)
+                  try {
+                    await saveAsSkill()
+                    setSkillSaved(true)
+                  } finally {
+                    setSkillSaving(false)
+                  }
+                }}
+                className="rounded-lg bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+              >
+                {skillSaving ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                onClick={() => dismissSkillSave()}
+                className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+          {skillSaved && (
+            <div className="mx-3 my-2 flex items-center gap-2 rounded-xl border border-green-500/30 bg-green-500/5 px-3 py-2 text-sm text-green-600 dark:text-green-400">
+              <Puzzle className="h-4 w-4 shrink-0" />
+              Skill saved successfully!
+            </div>
+          )}
           {messages.length === 0 && !isLoading && (
             <div className="px-3 pb-2">
               <SuggestionChips onSelect={(text) => chatInputRef.current?.setInput(text)} />
