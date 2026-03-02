@@ -3,6 +3,7 @@ import type { PageElement } from './snapshot'
 export interface ActionStep {
   method: 'click' | 'type' | 'select' | 'press'
   backendNodeId: number
+  xpath?: string
   roleName: string
   args?: string[]
   description: string

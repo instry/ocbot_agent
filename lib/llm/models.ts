@@ -20,11 +20,13 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     defaultBaseUrl: 'https://api.anthropic.com',
     apiKeyUrl: 'https://console.anthropic.com/settings/keys',
     apiKeyPlaceholder: 'sk-ant-...',
-    defaultModelId: 'claude-sonnet-4-5-20250929',
+    defaultModelId: 'claude-sonnet-4-6',
     models: [
+      { id: 'claude-opus-4-6', name: 'Claude 4.6 Opus', contextWindow: 200000 },
+      { id: 'claude-sonnet-4-6', name: 'Claude 4.6 Sonnet', contextWindow: 200000 },
+      { id: 'claude-haiku-4-5-20251001', name: 'Claude 4.5 Haiku', contextWindow: 200000 },
       { id: 'claude-sonnet-4-5-20250929', name: 'Claude 4.5 Sonnet', contextWindow: 200000 },
       { id: 'claude-opus-4-5-20251101', name: 'Claude 4.5 Opus', contextWindow: 200000 },
-      { id: 'claude-haiku-4-5-20251001', name: 'Claude 4.5 Haiku', contextWindow: 200000 },
     ],
   },
   {
@@ -137,9 +139,10 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     defaultBaseUrl: 'https://openrouter.ai/api/v1',
     apiKeyUrl: 'https://openrouter.ai/keys',
     apiKeyPlaceholder: 'sk-or-...',
-    defaultModelId: 'anthropic/claude-sonnet-4-5',
+    defaultModelId: 'anthropic/claude-sonnet-4-6',
     models: [
-      { id: 'anthropic/claude-sonnet-4-5', name: 'Claude 4.5 Sonnet', contextWindow: 200000 },
+      { id: 'anthropic/claude-sonnet-4-6', name: 'Claude 4.6 Sonnet', contextWindow: 200000 },
+      { id: 'anthropic/claude-opus-4-6', name: 'Claude 4.6 Opus', contextWindow: 200000 },
       { id: 'openai/gpt-5.2', name: 'GPT-5.2', contextWindow: 400000 },
       { id: 'google/gemini-3.1-pro', name: 'Gemini 3.1 Pro', contextWindow: 1000000 },
       { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', contextWindow: 128000 },

@@ -1,19 +1,17 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { WelcomeHero } from '@/components/WelcomeHero'
 import { ChatInput } from '@/components/ChatInput'
 import type { ChatInputHandle } from '@/components/ChatInput'
 import { SuggestionChips } from '@/components/SuggestionChips'
 import { Settings } from '@/components/Settings'
-import { ChannelSettings } from '@/components/ChannelSettings'
 import { Sidebar } from './components/Sidebar'
 import { SkillsPage } from './pages/SkillsPage'
 import { AboutPage } from './pages/AboutPage'
 import { useLlmProvider } from '@/lib/llm/useLlmProvider'
 import { useSettings } from '@/lib/hooks/useSettings'
 import type { LlmProvider } from '@/lib/llm/types'
-import type { ChannelStatus } from '@/lib/channels/types'
 
-type Page = 'new-session' | 'skills' | 'remote' | 'settings' | 'about'
+type Page = 'new-session' | 'skills' | 'claw' | 'settings' | 'about'
 
 function NewSessionPage({
   providers,
@@ -61,37 +59,11 @@ function NewSessionPage({
 export function App() {
   const [page, setPage] = useState<Page>(() => {
     const hash = window.location.hash.replace('#/', '')
-    if (['skills', 'remote', 'settings', 'about'].includes(hash)) return hash as Page
+    if (['skills', 'claw', 'settings', 'about'].includes(hash)) return hash as Page
     return 'new-session'
   })
   const { providers, selectedProvider, saveProvider, deleteProvider, selectProvider } = useLlmProvider()
   const { colorScheme, language, setColorScheme, setLanguage } = useSettings()
-  const [channelStatuses, setChannelStatuses] = useState<Record<string, ChannelStatus>>({})
-
-  const refreshChannelStatuses = useCallback(() => {
-    chrome.runtime.sendMessage({ type: 'getChannelStatuses' }, (resp) => {
-      if (resp?.ok) {
-        setChannelStatuses(resp.statuses)
-      }
-    })
-  }, [])
-
-  useEffect(() => {
-    refreshChannelStatuses()
-    const interval = setInterval(refreshChannelStatuses, 5000)
-
-    const listener = (message: { type: string; channelId: string; status: ChannelStatus }) => {
-      if (message.type === 'channelStatusUpdate') {
-        setChannelStatuses(prev => ({ ...prev, [message.channelId]: message.status }))
-      }
-    }
-    chrome.runtime.onMessage.addListener(listener)
-
-    return () => {
-      clearInterval(interval)
-      chrome.runtime.onMessage.removeListener(listener)
-    }
-  }, [refreshChannelStatuses])
 
   return (
     <div className="flex h-screen w-screen bg-background text-foreground">
@@ -115,16 +87,16 @@ export function App() {
           />
         )}
         {page === 'skills' && <SkillsPage />}
-        {page === 'remote' && (
-          <div className="flex h-full flex-col">
-            <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
-              <h2 className="text-sm font-semibold">Remote Channels</h2>
-            </div>
-            <div className="flex-1 overflow-y-auto p-3">
-              <ChannelSettings
-                channelStatuses={channelStatuses}
-                onRefreshStatuses={refreshChannelStatuses}
-              />
+        {page === 'claw' && (
+          <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
+            <svg className="h-16 w-16 opacity-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 15C7 13 3 8 5 4C6 2 9 1 11 3" />
+              <path d="M12 15C17 13 21 8 19 4C18 2 15 1 13 3" />
+              <path d="M12 15V22" />
+            </svg>
+            <div className="text-center">
+              <h2 className="text-lg font-semibold text-foreground">Claw</h2>
+              <p className="mt-1 text-sm">Coming soon</p>
             </div>
           </div>
         )}

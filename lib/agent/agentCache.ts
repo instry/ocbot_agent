@@ -101,6 +101,21 @@ export class AgentCache {
 
 // --- Replay engine ---
 
+export interface HealEvent {
+  stepIndex: number
+  level: number
+  reason: string
+  resolved: boolean
+  tokenCost: number
+  durationMs: number
+}
+
+export interface ReplayResult {
+  success: boolean
+  failedIndex: number
+  healEvents: HealEvent[]
+}
+
 export interface ReplayCallbacks {
   onStepStart: (index: number, step: AgentReplayStep) => void
   onStepEnd: (index: number, step: AgentReplayStep, result: string) => void
@@ -114,9 +129,11 @@ export async function replayAgentSteps(
   executeToolFn: (name: string, argsJson: string) => Promise<string>,
   callbacks: ReplayCallbacks,
   signal?: AbortSignal,
-): Promise<{ success: boolean; failedIndex: number }> {
+): Promise<ReplayResult> {
+  const healEvents: HealEvent[] = []
+
   for (let i = 0; i < steps.length; i++) {
-    if (signal?.aborted) return { success: false, failedIndex: i }
+    if (signal?.aborted) return { success: false, failedIndex: i, healEvents }
 
     const step = steps[i]
 
@@ -127,6 +144,7 @@ export async function replayAgentSteps(
     }
 
     callbacks.onStepStart(i, step)
+    const stepStart = Date.now()
 
     try {
       let result: string
@@ -153,17 +171,45 @@ export async function replayAgentSteps(
       // Check if the result indicates failure
       const parsed = tryParseJson(result)
       if (parsed && parsed.success === false) {
+        healEvents.push({
+          stepIndex: i,
+          level: 0,
+          reason: (parsed.error as string) ?? 'step_returned_failure',
+          resolved: false,
+          tokenCost: 0,
+          durationMs: Date.now() - stepStart,
+        })
         callbacks.onStepEnd(i, step, result)
-        return { success: false, failedIndex: i }
+        return { success: false, failedIndex: i, healEvents }
+      }
+
+      // Check if the act() self-healed (healed via xpath or fuzzy match)
+      if (parsed && parsed.selfHealed === true) {
+        healEvents.push({
+          stepIndex: i,
+          level: parsed.cacheHit ? 1 : 2,
+          reason: 'selector_changed',
+          resolved: true,
+          tokenCost: parsed.cacheHit ? 0 : (parsed.tokenCost as number ?? 0),
+          durationMs: Date.now() - stepStart,
+        })
       }
 
       callbacks.onStepEnd(i, step, result)
-    } catch {
-      return { success: false, failedIndex: i }
+    } catch (err: unknown) {
+      healEvents.push({
+        stepIndex: i,
+        level: 0,
+        reason: err instanceof Error ? err.message : 'unknown_error',
+        resolved: false,
+        tokenCost: 0,
+        durationMs: Date.now() - stepStart,
+      })
+      return { success: false, failedIndex: i, healEvents }
     }
   }
 
-  return { success: true, failedIndex: -1 }
+  return { success: true, failedIndex: -1, healEvents }
 }
 
 // --- Mapping helpers ---
@@ -176,7 +222,7 @@ export function toolCallToReplayStep(
   switch (name) {
     case 'act': {
       const parsed = tryParseJson(result)
-      const actions = parsed?.actions ? [] as ActionStep[] : []
+      const actions = (parsed?.actions as ActionStep[]) ?? []
       return { type: 'act', instruction: (args.instruction as string) || '', actions }
     }
     case 'fillForm': {

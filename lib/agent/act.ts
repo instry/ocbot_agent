@@ -36,6 +36,91 @@ async function resolveNode(
   return object.objectId
 }
 
+/**
+ * Compute an absolute XPath for a DOM node identified by backendNodeId.
+ * Returns null on any failure (node gone, detached, etc.).
+ */
+async function resolveXPath(
+  tabId: number,
+  backendNodeId: number,
+): Promise<string | null> {
+  try {
+    const objectId = await resolveNode(tabId, backendNodeId)
+    const { result } = await sendCdp<{ result: { value: string } }>(
+      tabId,
+      'Runtime.callFunctionOn',
+      {
+        objectId,
+        functionDeclaration: `function() {
+          let el = this;
+          const parts = [];
+          while (el && el.nodeType === Node.ELEMENT_NODE) {
+            let idx = 1;
+            let sib = el.previousElementSibling;
+            while (sib) {
+              if (sib.tagName === el.tagName) idx++;
+              sib = sib.previousElementSibling;
+            }
+            parts.unshift(el.tagName.toLowerCase() + '[' + idx + ']');
+            el = el.parentElement;
+          }
+          return '/' + parts.join('/');
+        }`,
+        returnByValue: true,
+      },
+    )
+    await sendCdp(tabId, 'Runtime.releaseObject', { objectId })
+    return result.value || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Find a DOM element by XPath and return its backendNodeId.
+ * Returns null if the XPath doesn't match any element.
+ */
+async function findByXPath(
+  tabId: number,
+  xpath: string,
+): Promise<number | null> {
+  try {
+    const { result } = await sendCdp<{ result: { objectId?: string } }>(
+      tabId,
+      'Runtime.evaluate',
+      {
+        expression: `document.evaluate(${JSON.stringify(xpath)}, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue`,
+        returnByValue: false,
+      },
+    )
+    if (!result.objectId) return null
+    const { node } = await sendCdp<{ node: { backendNodeId: number } }>(
+      tabId,
+      'DOM.describeNode',
+      { objectId: result.objectId },
+    )
+    await sendCdp(tabId, 'Runtime.releaseObject', { objectId: result.objectId })
+    return node.backendNodeId
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Enrich actions with XPath for stable cross-session selectors.
+ */
+async function enrichWithXPath(
+  tabId: number,
+  actions: ActionStep[],
+): Promise<ActionStep[]> {
+  const enriched: ActionStep[] = []
+  for (const action of actions) {
+    const xpath = await resolveXPath(tabId, action.backendNodeId)
+    enriched.push({ ...action, xpath: xpath ?? undefined })
+  }
+  return enriched
+}
+
 async function scrollIntoView(tabId: number, objectId: string): Promise<void> {
   try {
     await sendCdp(tabId, 'DOM.scrollIntoViewIfNeeded', { objectId })
@@ -181,15 +266,27 @@ async function replayActions(
 }
 
 /**
- * Try to self-heal cached actions by fuzzy-matching roleName in current AXTree.
+ * Try to self-heal cached actions by:
+ * 1. XPath lookup (stable across page loads)
+ * 2. Fuzzy roleName matching in current AXTree
  * Returns updated actions with new backendNodeIds, or null if matching fails.
  */
-function selfHealFromSnapshot(
+async function selfHealFromSnapshot(
+  tabId: number,
   cachedActions: ActionStep[],
   snapshot: PageSnapshot,
-): ActionStep[] | null {
+): Promise<ActionStep[] | null> {
   const healed: ActionStep[] = []
   for (const action of cachedActions) {
+    // Try xpath first (most stable)
+    if (action.xpath) {
+      const nodeId = await findByXPath(tabId, action.xpath)
+      if (nodeId) {
+        healed.push({ ...action, backendNodeId: nodeId })
+        continue
+      }
+    }
+    // Fallback to roleName fuzzy match
     const match = fuzzyMatchByRoleName(action.roleName, snapshot.elements)
     if (!match) return null
     healed.push({
@@ -213,17 +310,18 @@ export async function act(
   // 1. Check cache
   const cached = await cache.lookup(instruction, url)
   if (cached) {
-    // Try self-heal via roleName match first (no LLM needed)
+    // Try self-heal via xpath + roleName match first (no LLM needed)
     const snapshot = await capturePageSnapshot(tabId)
-    const healed = selfHealFromSnapshot(cached.actions, snapshot)
+    const healed = await selfHealFromSnapshot(tabId, cached.actions, snapshot)
 
     if (healed) {
       const replay = await replayActions(tabId, healed)
       if (replay.success) {
-        await cache.update(instruction, url, healed)
+        const enriched = await enrichWithXPath(tabId, healed)
+        await cache.update(instruction, url, enriched)
         return {
           success: true,
-          actions: healed,
+          actions: enriched,
           description: cached.description,
           cacheHit: true,
           selfHealed: healed !== cached.actions,
@@ -240,7 +338,8 @@ export async function act(
     const healReplay = await replayActions(tabId, inferred.actions)
 
     if (healReplay.success) {
-      await cache.update(instruction, url, inferred.actions)
+      const enriched = await enrichWithXPath(tabId, inferred.actions)
+      await cache.update(instruction, url, enriched)
     }
 
     return {
@@ -252,7 +351,7 @@ export async function act(
     }
   }
 
-  // 2. Cache miss: snapshot → infer → execute → store
+  // 2. Cache miss: snapshot → infer → execute → store (with xpath)
   const snapshot = await capturePageSnapshot(tabId)
   if (signal?.aborted) throw new Error('Aborted')
 
@@ -260,7 +359,8 @@ export async function act(
   const result = await replayActions(tabId, inferred.actions)
 
   if (result.success) {
-    await cache.store(instruction, url, inferred.actions, inferred.description)
+    const enriched = await enrichWithXPath(tabId, inferred.actions)
+    await cache.store(instruction, url, enriched, inferred.description)
   }
 
   return {

@@ -1,11 +1,25 @@
 import { useState, useEffect, useCallback } from 'react'
-import { SquarePen, Puzzle, Smartphone, Settings, Info } from 'lucide-react'
+import { SquarePen, Puzzle, Settings, Info } from 'lucide-react'
+
+function ClawIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {/* Left pincer finger — curves out left then curls inward at tip */}
+      <path d="M12 15C7 13 3 8 5 4C6 2 9 1 11 3" />
+      {/* Right pincer finger — mirror */}
+      <path d="M12 15C17 13 21 8 19 4C18 2 15 1 13 3" />
+      {/* Arm */}
+      <path d="M12 15V22" />
+    </svg>
+  )
+}
+
 import { BotAvatar } from '@/components/BotAvatar'
 import { ChatList } from '@/components/ChatList'
 import { getConversations, deleteConversation } from '@/lib/storage'
 import type { Conversation } from '@/lib/types'
 
-type Page = 'new-session' | 'skills' | 'remote' | 'settings' | 'about'
+type Page = 'new-session' | 'skills' | 'claw' | 'settings' | 'about'
 
 interface SidebarProps {
   activePage: Page
@@ -13,9 +27,9 @@ interface SidebarProps {
   onSelectConversation: (id: string) => void
 }
 
-const bottomNavItems: { id: Page; label: string; icon: typeof Puzzle }[] = [
+const bottomNavItems: { id: Page; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'skills', label: 'Skills', icon: Puzzle },
-  { id: 'remote', label: 'Remote', icon: Smartphone },
+  { id: 'claw', label: 'Claw', icon: ClawIcon },
   { id: 'settings', label: 'Settings', icon: Settings },
   { id: 'about', label: 'About', icon: Info },
 ]
