@@ -9,6 +9,7 @@ import { Header } from './components/Header'
 import { useLlmProvider } from '@/lib/llm/useLlmProvider'
 import { useChat } from '@/lib/hooks/useChat'
 import type { ChannelStatus } from '@/lib/channels/types'
+import { SkillStore } from '@/lib/skills/store'
 
 type View = 'chat' | 'chatList'
 
@@ -38,7 +39,18 @@ export function App() {
 
   // Pick up pending message from home page (on mount)
   useEffect(() => {
-    chrome.storage.local.get(['ocbot_pending_message', 'ocbot_load_conversation']).then(result => {
+    chrome.storage.local.get(['ocbot_pending_message', 'ocbot_load_conversation', 'ocbot_run_skill']).then(async result => {
+      const skillId = result.ocbot_run_skill
+      if (skillId && typeof skillId === 'string') {
+        chrome.storage.local.remove('ocbot_run_skill')
+        const store = new SkillStore()
+        const skill = await store.get(skillId)
+        if (skill) {
+          newChat()
+          pendingMessageRef.current = `Run skill: ${skill.name}`
+        }
+        return
+      }
       const text = result.ocbot_pending_message
       if (text && typeof text === 'string') {
         chrome.storage.local.remove('ocbot_pending_message')
@@ -58,6 +70,17 @@ export function App() {
   // Pick up pending message or load conversation when side panel is already open
   useEffect(() => {
     const listener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if (changes.ocbot_run_skill?.newValue) {
+        const skillId = changes.ocbot_run_skill.newValue
+        chrome.storage.local.remove('ocbot_run_skill')
+        const store = new SkillStore()
+        store.get(skillId).then(skill => {
+          if (skill) {
+            newChat()
+            pendingMessageRef.current = `Run skill: ${skill.name}`
+          }
+        })
+      }
       if (changes.ocbot_pending_message?.newValue) {
         const text = changes.ocbot_pending_message.newValue
         chrome.storage.local.remove('ocbot_pending_message')

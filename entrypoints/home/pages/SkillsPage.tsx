@@ -111,6 +111,12 @@ export function SkillsPage() {
     refreshMySkills()
   }, [refreshMySkills])
 
+  const handleRunSkill = useCallback(async (skill: Skill) => {
+    await chrome.storage.local.set({ ocbot_run_skill: skill.id })
+    const { id: windowId } = await chrome.windows.getCurrent()
+    await chrome.sidePanel.open({ windowId: windowId! })
+  }, [])
+
   const filtered = useMemo(() => {
     setPage(1)
     let skills = activeTab === 'my-skills' ? mySkills : MOCK_SKILLS
@@ -137,6 +143,7 @@ export function SkillsPage() {
         skill={selectedSkill}
         onBack={() => setSelectedSkill(null)}
         backLabel={activeTab === 'my-skills' ? 'Back to My Skills' : 'Back to Marketplace'}
+        onRun={handleRunSkill}
         onDelete={activeTab === 'my-skills' ? handleDeleteSkill : undefined}
       />
     )
