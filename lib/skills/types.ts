@@ -1,0 +1,73 @@
+// lib/skills/types.ts
+import type { AgentReplayStep, HealEvent } from '@/lib/agent/agentCache'
+
+export interface SkillParameter {
+  name: string
+  type: 'string' | 'number' | 'boolean' | 'select'
+  description: string
+  required: boolean
+  default?: string | number | boolean
+  options?: string[] // for 'select' type
+}
+
+export interface Skill {
+  id: string
+  name: string
+  description: string
+  version: number
+  categories: string[]
+  parameters: SkillParameter[]
+
+  author: string
+  sourceSkillId?: string
+  createdAt: number
+  updatedAt: number
+
+  skillMd: string
+  steps: AgentReplayStep[]
+  startUrl: string
+
+  score: number
+  status: 'active' | 'degraded' | 'archived'
+  totalRuns: number
+  successCount: number
+}
+
+export interface SkillExecution {
+  id: string
+  skillId: string
+  skillVersion: number
+  timestamp: number
+  track: 'fast' | 'agent' | 'hybrid'
+  healEvents: HealEvent[]
+  totalSteps: number
+  completedSteps: number
+  success: boolean
+  userFeedback?: 'good' | 'bad'
+  url: string
+  parameters: Record<string, string>
+  durationMs: number
+}
+
+export interface SkillRunCallbacks {
+  onStepStart: (index: number, step: AgentReplayStep) => void
+  onStepEnd: (index: number, step: AgentReplayStep, result: string) => void
+  onTrackSwitch: (from: 'fast' | 'agent', to: 'fast' | 'agent') => void
+  onHeal: (event: HealEvent) => void
+  onTextDelta: (text: string) => void
+}
+
+export interface SkillRunResult {
+  success: boolean
+  track: 'fast' | 'agent' | 'hybrid'
+  healEvents: HealEvent[]
+  completedSteps: number
+  totalSteps: number
+  durationMs: number
+  updatedSteps?: AgentReplayStep[]
+}
+
+export interface SkillMatch {
+  skill: Skill
+  confidence: 'strong' | 'weak'
+}
