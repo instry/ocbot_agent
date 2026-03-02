@@ -1,0 +1,150 @@
+// lib/skills/store.ts
+import type { Skill, SkillExecution } from './types'
+
+const SKILLS_KEY = 'ocbot_skills'
+const EXECUTIONS_KEY = 'ocbot_skill_executions'
+const MAX_SKILLS = 200
+const MAX_EXECUTIONS_PER_SKILL = 50
+
+export class SkillStore {
+  // === Internal storage access ===
+
+  private async getAll(): Promise<Record<string, Skill>> {
+    const result = await chrome.storage.local.get(SKILLS_KEY)
+    return (result[SKILLS_KEY] as Record<string, Skill>) || {}
+  }
+
+  private async setAll(data: Record<string, Skill>): Promise<void> {
+    await chrome.storage.local.set({ [SKILLS_KEY]: data })
+  }
+
+  private async getAllExecutions(): Promise<Record<string, SkillExecution[]>> {
+    const result = await chrome.storage.local.get(EXECUTIONS_KEY)
+    return (result[EXECUTIONS_KEY] as Record<string, SkillExecution[]>) || {}
+  }
+
+  private async setAllExecutions(data: Record<string, SkillExecution[]>): Promise<void> {
+    await chrome.storage.local.set({ [EXECUTIONS_KEY]: data })
+  }
+
+  // === Skill CRUD ===
+
+  /** All skills sorted by updatedAt descending. */
+  async list(): Promise<Skill[]> {
+    const all = await this.getAll()
+    return Object.values(all).sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+
+  async get(id: string): Promise<Skill | null> {
+    const all = await this.getAll()
+    return all[id] ?? null
+  }
+
+  /** Upsert a skill. Applies LRU eviction when over MAX_SKILLS. */
+  async save(skill: Skill): Promise<void> {
+    const all = await this.getAll()
+
+    // LRU eviction if at capacity and this is a new skill
+    if (!all[skill.id]) {
+      const keys = Object.keys(all)
+      if (keys.length >= MAX_SKILLS) {
+        const sorted = keys.sort((a, b) => (all[a].updatedAt || 0) - (all[b].updatedAt || 0))
+        const toRemove = sorted.slice(0, keys.length - MAX_SKILLS + 1)
+        for (const k of toRemove) delete all[k]
+      }
+    }
+
+    all[skill.id] = skill
+    await this.setAll(all)
+  }
+
+  /** Delete a skill and its execution history. */
+  async delete(id: string): Promise<void> {
+    const all = await this.getAll()
+    delete all[id]
+    await this.setAll(all)
+
+    const execs = await this.getAllExecutions()
+    delete execs[id]
+    await this.setAllExecutions(execs)
+  }
+
+  /** Filter skills by name or description (case-insensitive substring match). */
+  async search(query: string): Promise<Skill[]> {
+    const q = query.trim().toLowerCase()
+    if (!q) return this.list()
+    const all = await this.getAll()
+    return Object.values(all)
+      .filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.description.toLowerCase().includes(q),
+      )
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+
+  // === Execution history ===
+
+  /** Prepend an execution, keeping at most MAX_EXECUTIONS_PER_SKILL per skill. */
+  async addExecution(execution: SkillExecution): Promise<void> {
+    const all = await this.getAllExecutions()
+    const list = all[execution.skillId] || []
+    list.unshift(execution)
+    all[execution.skillId] = list.slice(0, MAX_EXECUTIONS_PER_SKILL)
+    await this.setAllExecutions(all)
+  }
+
+  async getExecutions(skillId: string): Promise<SkillExecution[]> {
+    const all = await this.getAllExecutions()
+    return all[skillId] || []
+  }
+
+  // === Score computation ===
+
+  /**
+   * Compute a composite score from execution history.
+   *
+   * Formula: successRate * 0.4 + stability * 0.25 + efficiency * 0.2 + satisfaction * 0.15
+   *
+   * - successRate: success/total over recent 20 executions
+   * - stability: 1 - (executions needing L2+ heal / total recent)
+   * - efficiency: 1 - (avg heal level / 4)
+   * - satisfaction: good / (good + bad), default 0.5 if no feedback
+   */
+  computeScore(executions: SkillExecution[]): number {
+    if (executions.length === 0) return 0.5
+
+    const recent = executions.slice(0, 20)
+    const total = recent.length
+
+    // successRate
+    const successCount = recent.filter((e) => e.success).length
+    const successRate = successCount / total
+
+    // stability: 1 - (executions with any heal level >= 2 / total)
+    const l2HealCount = recent.filter((e) =>
+      e.healEvents.some((h) => h.level >= 2),
+    ).length
+    const stability = 1 - l2HealCount / total
+
+    // efficiency: 1 - (avg max heal level across executions / 4)
+    const healLevels = recent.map((e) => {
+      if (e.healEvents.length === 0) return 0
+      return Math.max(...e.healEvents.map((h) => h.level))
+    })
+    const avgHealLevel = healLevels.reduce((a, b) => a + b, 0) / total
+    const efficiency = 1 - avgHealLevel / 4
+
+    // satisfaction: good / (good + bad), default 0.5
+    const good = recent.filter((e) => e.userFeedback === 'good').length
+    const bad = recent.filter((e) => e.userFeedback === 'bad').length
+    const satisfaction = good + bad > 0 ? good / (good + bad) : 0.5
+
+    return (
+      successRate * 0.4 +
+      stability * 0.25 +
+      efficiency * 0.2 +
+      satisfaction * 0.15
+    )
+  }
+}
