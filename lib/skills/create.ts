@@ -165,6 +165,9 @@ Return ONLY the JSON object, nothing else.`
     status: 'active',
     totalRuns: 1,
     successCount: 1,
+    source: 'user',
+    instruction: '',
+    configSignature: '',
   }
 }
 
@@ -199,5 +202,47 @@ export function createSkillManual(
     status: 'active',
     totalRuns: 0,
     successCount: 0,
+    source: 'user',
+    instruction: '',
+    configSignature: '',
+  }
+}
+
+// ---------------------------------------------------------------------------
+// createAutoSkill
+// ---------------------------------------------------------------------------
+
+/**
+ * Create an auto-skill (formerly AgentCache entry) from a completed agent execution.
+ * No LLM call — purely synchronous metadata derivation.
+ */
+export function createAutoSkill(
+  instruction: string,
+  steps: AgentReplayStep[],
+  startUrl: string,
+  configSignature: string,
+): Skill {
+  const now = Date.now()
+  const normalized = instruction.trim().toLowerCase()
+  return {
+    id: crypto.randomUUID(),
+    name: instruction.slice(0, 60),
+    description: instruction,
+    version: 1,
+    categories: [],
+    parameters: [],
+    author: 'agent',
+    createdAt: now,
+    updatedAt: now,
+    skillMd: '# Auto-skill\n\n' + instruction,
+    steps,
+    startUrl,
+    score: 1,
+    status: 'active',
+    totalRuns: 1,
+    successCount: 1,
+    source: 'auto',
+    instruction: normalized,
+    configSignature,
   }
 }

@@ -32,6 +32,10 @@ export interface Skill {
   totalRuns: number
   successCount: number
   fragileSteps?: number[]
+
+  source: 'auto' | 'user'
+  instruction: string          // normalized instruction for auto-skill matching; '' for user skills
+  configSignature: string      // 'provider:model' for auto-skills; '' for user skills
 }
 
 export interface SkillExecution {

@@ -4,7 +4,6 @@ import type { LlmProvider, LlmRequestMessage } from '@/lib/llm/types'
 import type { AgentReplayStep } from '@/lib/agent/agentCache'
 import { runAgentLoop } from '@/lib/agent/loop'
 import { ActCache } from '@/lib/agent/cache'
-import { AgentCache } from '@/lib/agent/agentCache'
 import { createSkillFromExecution } from '@/lib/skills/create'
 import { SkillStore } from '@/lib/skills/store'
 import { saveConversation, getConversations, deleteConversation } from '@/lib/storage'
@@ -17,7 +16,6 @@ export interface ToolStatus {
 }
 
 const actCache = new ActCache()
-const agentCacheInstance = new AgentCache()
 
 function generateTitle(messages: ChatMessage[]): string {
   const firstUserMsg = messages.find(m => m.role === 'user')
@@ -208,7 +206,6 @@ export function useChat(provider: LlmProvider | null) {
         abortController.signal,
         actCache,
         undefined, // variables
-        agentCacheInstance,
       )
     } catch (err: unknown) {
       if (abortController.signal.aborted) return

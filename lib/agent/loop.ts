@@ -4,15 +4,15 @@ import type { Variables } from './variables'
 import { streamChat } from '../llm/client'
 import { BROWSER_TOOLS, executeTool } from './tools'
 import { buildSystemPrompt } from './systemPrompt'
-import { variableKeysForCache } from './variables'
+import { capturePageSnapshot } from './snapshot'
+import { ensureAttached } from './cdp'
 import {
-  AgentCache,
   type AgentReplayStep,
   toolCallToReplayStep,
-  replayAgentSteps,
   getConfigSignature,
 } from './agentCache'
-import { matchSkill } from '@/lib/skills/matcher'
+import { matchSkill, matchAutoSkill } from '@/lib/skills/matcher'
+import { createAutoSkill } from '@/lib/skills/create'
 import { SkillStore } from '@/lib/skills/store'
 import { SkillRunner } from '@/lib/skills/runner'
 import type { SkillMatch } from '@/lib/skills/types'
@@ -47,24 +47,40 @@ export async function runAgentLoop(
   signal?: AbortSignal,
   cache?: ActCache,
   variables?: Variables,
-  agentCache?: AgentCache,
 ): Promise<void> {
   const pageContext = await getPageContext()
-  const systemMessage: LlmRequestMessage = {
-    role: 'system',
-    content: buildSystemPrompt(pageContext, variables),
+
+  // Auto-capture ariaTree for the current page so the agent can act immediately
+  let initialAriaTree: string | undefined
+  if (pageContext?.url) {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      const tabId = tab?.id
+      if (tabId) {
+        await ensureAttached(tabId)
+        const snapshot = await capturePageSnapshot(tabId)
+        const maxLen = 70000
+        initialAriaTree = snapshot.tree.length > maxLen
+          ? snapshot.tree.slice(0, maxLen) + '\n... (truncated)'
+          : snapshot.tree
+      }
+    } catch { /* best effort */ }
   }
 
-  // Extract the user instruction (last user message) for agent cache key
+  const systemMessage: LlmRequestMessage = {
+    role: 'system',
+    content: buildSystemPrompt(pageContext, variables, initialAriaTree),
+  }
+
+  // Extract the user instruction (last user message) for skill matching
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
   const userInstruction = lastUserMsg?.content || ''
   const startUrl = pageContext?.url || ''
-  const varKeys = variables ? variableKeysForCache(variables) : []
   const configSig = getConfigSignature(provider)
+  const skillStore = new SkillStore()
 
-  // --- Skill matching (before agentCache) ---
+  // --- Skill matching (user skills) ---
   if (userInstruction) {
-    const skillStore = new SkillStore()
     const skillMatch = await matchSkill(
       userInstruction,
       startUrl,
@@ -109,38 +125,35 @@ export async function runAgentLoop(
     }
   }
 
-  // --- Agent cache replay ---
-  if (agentCache && userInstruction) {
-    const cached = await agentCache.lookup(userInstruction, startUrl, varKeys, configSig)
-    if (cached && cached.steps.length > 0) {
-      console.log('[ocbot] AgentCache hit, replaying', cached.steps.length, 'steps')
-
-      const executeForReplay = (name: string, argsJson: string) =>
-        executeTool(name, argsJson, provider, cache!, signal, variables)
-
-      const replayResult = await replayAgentSteps(
-        cached.steps,
-        executeForReplay,
+  // --- Auto-skill replay (replaces AgentCache) ---
+  if (userInstruction) {
+    const autoSkill = await matchAutoSkill(userInstruction, configSig, skillStore)
+    if (autoSkill?.steps.length) {
+      console.log('[ocbot] Auto-skill hit, replaying', autoSkill.steps.length, 'steps')
+      const runner = new SkillRunner(skillStore)
+      const result = await runner.executeFastTrackOnly(
+        autoSkill,
+        {},
+        provider,
+        cache!,
         {
-          onStepStart: (i, step) => {
-            callbacks.onToolCallStart(`replay_${i}`, step.type)
-          },
-          onStepEnd: (i, step, result) => {
-            callbacks.onToolCallEnd(`replay_${i}`, step.type, result)
-          },
-          onSkip: () => { /* no-op for skipped steps */ },
+          onStepStart: (i, step) => callbacks.onToolCallStart(`replay_${i}`, step.type),
+          onStepEnd: (i, step, res) => callbacks.onToolCallEnd(`replay_${i}`, step.type, res),
+          onTrackSwitch: () => {},
+          onHeal: () => {},
+          onTextDelta: callbacks.onTextDelta,
         },
         signal,
+        variables,
       )
 
-      if (replayResult.success) {
-        callbacks.onTextDelta('Task completed successfully (from cache).')
-        callbacks.onAssistantMessage('Task completed successfully (from cache).', [])
+      if (result.success) {
+        callbacks.onTextDelta('Task completed successfully (from auto-skill).')
+        callbacks.onAssistantMessage('Task completed successfully (from auto-skill).', [])
         return
       }
-
-      // Replay failed — fall through to normal LLM loop
-      console.log('[ocbot] AgentCache replay failed at step', replayResult.failedIndex, ', falling back to LLM')
+      // Auto-skill failed — fall through to normal LLM loop
+      console.log('[ocbot] Auto-skill replay failed, falling back to LLM')
     }
   }
 
@@ -223,9 +236,10 @@ export async function runAgentLoop(
 
     // If no tool calls, we're done — assistant gave a text response
     if (toolCallArray.length === 0) {
-      // Store recorded steps in agent cache
-      if (agentCache && userInstruction && recordedSteps.length > 0) {
-        await agentCache.store(userInstruction, startUrl, varKeys, configSig, recordedSteps)
+      // Store recorded steps as auto-skill
+      if (userInstruction && recordedSteps.length > 0) {
+        const autoSkill = createAutoSkill(userInstruction, recordedSteps, startUrl, configSig)
+        await skillStore.saveAutoSkill(autoSkill)
       }
       // Expose recorded steps for "Save as Skill"
       if (recordedSteps.length > 0 && userInstruction && callbacks.onRecordedSteps) {
@@ -258,8 +272,9 @@ export async function runAgentLoop(
   }
 
   // Safety limit reached — store what we have and send final message
-  if (agentCache && userInstruction && recordedSteps.length > 0) {
-    await agentCache.store(userInstruction, startUrl, varKeys, configSig, recordedSteps)
+  if (userInstruction && recordedSteps.length > 0) {
+    const autoSkill = createAutoSkill(userInstruction, recordedSteps, startUrl, configSig)
+    await skillStore.saveAutoSkill(autoSkill)
   }
   if (recordedSteps.length > 0 && userInstruction && callbacks.onRecordedSteps) {
     callbacks.onRecordedSteps(recordedSteps, userInstruction, startUrl)

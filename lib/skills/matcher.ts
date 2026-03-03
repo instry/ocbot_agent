@@ -137,7 +137,7 @@ export async function matchSkill(
   signal?: AbortSignal,
 ): Promise<SkillMatch | null> {
   const allSkills = await store.list()
-  const activeSkills = allSkills.filter((s) => s.status === 'active')
+  const activeSkills = allSkills.filter((s) => s.status === 'active' && s.source !== 'auto')
 
   if (activeSkills.length === 0) return null
 
@@ -145,6 +145,35 @@ export async function matchSkill(
   const quick = urlMatch(activeSkills, userMessage, currentUrl)
   if (quick) return quick
 
-  // Phase 2: LLM semantic match
-  return llmMatch(activeSkills, userMessage, provider, signal)
+  // Phase 2 skipped — URL match is sufficient for installed skills
+  // llmMatch kept in file for potential future re-enablement behind a flag
+  return null
+}
+
+/**
+ * Match a user instruction against auto-skills (exact match on normalized instruction + configSignature).
+ * Touches updatedAt on hit to keep LRU fresh.
+ */
+export async function matchAutoSkill(
+  instruction: string,
+  configSignature: string,
+  store: SkillStore,
+): Promise<Skill | null> {
+  const allSkills = await store.list()
+  const normalized = instruction.trim().toLowerCase()
+
+  const match = allSkills.find(
+    (s) =>
+      s.source === 'auto' &&
+      s.status === 'active' &&
+      s.instruction === normalized &&
+      s.configSignature === configSignature,
+  )
+
+  if (!match) return null
+
+  // Touch updatedAt to keep LRU fresh
+  const updated: Skill = { ...match, updatedAt: Date.now() }
+  await store.saveAutoSkill(updated)
+  return updated
 }

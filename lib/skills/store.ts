@@ -5,6 +5,7 @@ const SKILLS_KEY = 'ocbot_skills'
 const EXECUTIONS_KEY = 'ocbot_skill_executions'
 const MAX_SKILLS = 200
 const MAX_EXECUTIONS_PER_SKILL = 50
+const MAX_AUTO_SKILLS = 50
 
 export class SkillStore {
   // === Internal storage access ===
@@ -67,6 +68,31 @@ export class SkillStore {
     const execs = await this.getAllExecutions()
     delete execs[id]
     await this.setAllExecutions(execs)
+  }
+
+  /**
+   * Save an auto-skill with separate capacity management.
+   * Evicts oldest auto-skills (by updatedAt) when at MAX_AUTO_SKILLS.
+   * Never touches user skills.
+   */
+  async saveAutoSkill(skill: Skill): Promise<void> {
+    const all = await this.getAll()
+
+    // Count existing auto-skills and evict oldest if at capacity
+    if (!all[skill.id]) {
+      const autoEntries = Object.entries(all)
+        .filter(([, s]) => s.source === 'auto')
+      if (autoEntries.length >= MAX_AUTO_SKILLS) {
+        const sorted = autoEntries.sort(
+          ([, a], [, b]) => (a.updatedAt || 0) - (b.updatedAt || 0),
+        )
+        const toRemove = sorted.slice(0, autoEntries.length - MAX_AUTO_SKILLS + 1)
+        for (const [k] of toRemove) delete all[k]
+      }
+    }
+
+    all[skill.id] = skill
+    await this.setAll(all)
   }
 
   /** Filter skills by name or description (case-insensitive substring match). */

@@ -56,6 +56,24 @@ export class SkillRunner {
   }
 
   /**
+   * Execute fast-track only (no agent-track fallback).
+   * Used by the auto-skill flow to prevent recursion when called from within the LLM loop.
+   */
+  async executeFastTrackOnly(
+    skill: Skill,
+    parameters: Record<string, string>,
+    provider: LlmProvider,
+    cache: ActCache,
+    callbacks: SkillRunCallbacks,
+    signal?: AbortSignal,
+    variables?: Variables,
+  ): Promise<SkillRunResult> {
+    const result = await this.runFastTrack(skill, parameters, provider, cache, callbacks, signal, variables)
+    await this.recordExecution(skill, parameters, result)
+    return result
+  }
+
+  /**
    * Execute a skill using dual-track strategy:
    * 1. Fast Track — replay cached steps if available.
    * 2. Agent Track — full LLM loop as fallback.
