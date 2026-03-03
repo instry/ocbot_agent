@@ -1,11 +1,11 @@
-import type { LlmProvider, LlmRequestMessage, ToolCallPart } from '../llm/types'
+import type { LlmProvider, LlmRequestMessage, ToolCallPart, ContentPart } from '../llm/types'
 import type { ActCache } from './cache'
 import type { Variables } from './variables'
 import { streamChat } from '../llm/client'
 import { BROWSER_TOOLS, executeTool } from './tools'
 import { buildSystemPrompt } from './systemPrompt'
 import { capturePageSnapshot } from './snapshot'
-import { ensureAttached } from './cdp'
+import { ensureAttached, sendCdp } from './cdp'
 import {
   type AgentReplayStep,
   toolCallToReplayStep,
@@ -54,8 +54,9 @@ export async function runAgentLoop(
   const t0 = performance.now()
   const pageContext = await getPageContext()
 
-  // Auto-capture ariaTree for the current page so the agent can act immediately
+  // Auto-capture ariaTree and screenshot for the current page
   let initialAriaTree: string | undefined
+  let initialScreenshot: string | undefined
   if (pageContext?.url) {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
@@ -67,13 +68,23 @@ export async function runAgentLoop(
         initialAriaTree = snapshot.tree.length > maxLen
           ? snapshot.tree.slice(0, maxLen) + '\n... (truncated)'
           : snapshot.tree
+        // Capture screenshot for vision
+        try {
+          const { data } = await sendCdp<{ data: string }>(tabId, 'Page.captureScreenshot', {
+            format: 'jpeg',
+            quality: 70,
+            optimizeForSpeed: true,
+          })
+          initialScreenshot = data
+          console.log(`${TAG} 📸 Screenshot captured (${(data.length / 1024).toFixed(0)}KB base64)`)
+        } catch { /* screenshot optional */ }
       }
     } catch { /* best effort */ }
   }
 
   const systemMessage: LlmRequestMessage = {
     role: 'system',
-    content: buildSystemPrompt(pageContext, variables, initialAriaTree),
+    content: buildSystemPrompt(pageContext, variables, initialAriaTree, !!initialScreenshot),
   }
 
   // Extract the user instruction (last user message) for skill matching
@@ -108,7 +119,7 @@ export async function runAgentLoop(
     )
 
     if (skillMatch && callbacks.onSkillMatch) {
-      console.log(`${TAG} 🎯 Skill matched: "${skillMatch.skill.name}" (score: ${skillMatch.score})`)
+      console.log(`${TAG} 🎯 Skill matched: "${skillMatch.skill.name}" (confidence: ${skillMatch.confidence})`)
       const shouldRun = await callbacks.onSkillMatch(skillMatch)
       if (shouldRun) {
         const runner = new SkillRunner(skillStore)
@@ -182,7 +193,27 @@ export async function runAgentLoop(
 
   // --- Normal LLM loop ---
   console.log(`${TAG} 🤖 Entering LLM loop`)
-  const allMessages: LlmRequestMessage[] = [systemMessage, ...messages]
+
+  // Inject screenshot into the last user message for vision
+  let preparedMessages = [...messages]
+  if (initialScreenshot) {
+    let lastUserIdx = -1
+    for (let i = preparedMessages.length - 1; i >= 0; i--) {
+      if (preparedMessages[i].role === 'user') { lastUserIdx = i; break }
+    }
+    if (lastUserIdx >= 0) {
+      const msg = preparedMessages[lastUserIdx]
+      const textContent = typeof msg.content === 'string' ? msg.content : ''
+      const parts: ContentPart[] = [
+        { type: 'image', mediaType: 'image/jpeg', data: initialScreenshot },
+        { type: 'text', text: textContent },
+      ]
+      preparedMessages[lastUserIdx] = { ...msg, content: parts }
+      console.log(`${TAG} 🖼️ Screenshot attached to user message`)
+    }
+  }
+
+  const allMessages: LlmRequestMessage[] = [systemMessage, ...preparedMessages]
   const recordedSteps: AgentReplayStep[] = []
   // Global tool call counter — ensures unique IDs across all turns
   let globalToolCallIndex = 0

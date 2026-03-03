@@ -36,6 +36,18 @@ export interface ReplayCallbacks {
 }
 
 const SKIP_TYPES = new Set(['ariaTree', 'think', 'extract', 'observe'])
+const TAG = '[ocbot:replay]'
+
+function stepSummary(step: AgentReplayStep): string {
+  switch (step.type) {
+    case 'act': return `act("${step.instruction.slice(0, 60)}")`
+    case 'navigate': return `navigate(${step.url})`
+    case 'fillForm': return `fillForm(${step.fields.map(f => f.field).join(', ')})`
+    case 'scroll': return `scroll(${step.direction})`
+    case 'wait': return 'wait'
+    default: return step.type
+  }
+}
 
 export type HealFn = (failedStep: AgentReplayStep, stepIndex: number) => Promise<AgentReplayStep | null>
 
@@ -47,6 +59,7 @@ export async function replayAgentSteps(
   healFn?: HealFn,
 ): Promise<ReplayResult> {
   const healEvents: HealEvent[] = []
+  console.group(`${TAG} Replaying ${steps.length} steps`)
 
   for (let i = 0; i < steps.length; i++) {
     if (signal?.aborted) return { success: false, failedIndex: i, healEvents }
@@ -55,12 +68,14 @@ export async function replayAgentSteps(
 
     // Skip no-op steps
     if (SKIP_TYPES.has(step.type)) {
+      console.log(`${TAG} [${i + 1}/${steps.length}] skip ${step.type}`)
       callbacks.onSkip(i, step)
       continue
     }
 
     callbacks.onStepStart(i, step)
     const stepStart = Date.now()
+    console.log(`${TAG} [${i + 1}/${steps.length}] ▶ ${stepSummary(step)}`)
 
     try {
       let result: string
@@ -87,6 +102,7 @@ export async function replayAgentSteps(
       // Check if the result indicates failure
       const parsed = tryParseJson(result)
       if (parsed && parsed.success === false) {
+        console.log(`${TAG} [${i + 1}/${steps.length}] ❌ failed (${Date.now() - stepStart}ms)`)
         // L2 heal: try healFn before giving up
         if (healFn) {
           logDebug('L2', 'Attempting L2 heal', { stepIndex: i, stepType: step.type })
@@ -94,6 +110,7 @@ export async function replayAgentSteps(
           const healed = await healFn(step, i)
           if (healed) {
             logDebug('L2', 'L2 heal result', { resolved: true, stepIndex: i })
+            console.log(`${TAG} [${i + 1}/${steps.length}] 🔧 L2 healed`)
             // L2 heal succeeded — record event and continue
             healEvents.push({
               stepIndex: i,
@@ -119,11 +136,13 @@ export async function replayAgentSteps(
           durationMs: Date.now() - stepStart,
         })
         callbacks.onStepEnd(i, step, result)
+        console.groupEnd() // replay
         return { success: false, failedIndex: i, healEvents }
       }
 
       // Check if the act() self-healed (healed via xpath or fuzzy match)
       if (parsed && parsed.selfHealed === true) {
+        console.log(`${TAG} [${i + 1}/${steps.length}] 🔧 self-healed (L${parsed.cacheHit ? 1 : 2})`)
         healEvents.push({
           stepIndex: i,
           level: parsed.cacheHit ? 1 : 2,
@@ -134,8 +153,12 @@ export async function replayAgentSteps(
         })
       }
 
+      const stepMs = Date.now() - stepStart
+      const status = parsed?.status || ''
+      console.log(`${TAG} [${i + 1}/${steps.length}] ✅ done (${stepMs}ms) ${status}`)
       callbacks.onStepEnd(i, step, result)
     } catch (err: unknown) {
+      console.log(`${TAG} [${i + 1}/${steps.length}] ❌ exception: ${err instanceof Error ? err.message : String(err)}`)
       // L2 heal on exception too
       if (healFn) {
         const healStart = Date.now()
@@ -163,10 +186,12 @@ export async function replayAgentSteps(
         tokenCost: 0,
         durationMs: Date.now() - stepStart,
       })
+      console.groupEnd() // replay
       return { success: false, failedIndex: i, healEvents }
     }
   }
 
+  console.groupEnd() // replay
   return { success: true, failedIndex: -1, healEvents }
 }
 
@@ -181,7 +206,12 @@ export function toolCallToReplayStep(
     case 'act': {
       const parsed = tryParseJson(result)
       const actions = (parsed?.actions as ActionStep[]) ?? []
-      return { type: 'act', instruction: (args.instruction as string) || '', actions }
+      // For direct acts (nodeId+method), args.instruction is empty — use description from result
+      let instruction = (args.instruction as string) || ''
+      if (!instruction && parsed?.description) {
+        instruction = parsed.description as string
+      }
+      return { type: 'act', instruction, actions }
     }
     case 'fillForm': {
       const fields = (args.fields || []) as FormField[]

@@ -443,12 +443,26 @@ export async function actDirect(
   const tabId = await getActiveTabId()
   await ensureAttached(tabId)
 
+  // Resolve the node's role and name for a meaningful description
+  let roleName = ''
+  try {
+    const snapshot = await capturePageSnapshot(tabId)
+    const el = snapshot.elements.find(e => e.backendNodeId === nodeId)
+    if (el) {
+      roleName = buildRoleName(el.role, el.name)
+    }
+  } catch { /* best effort */ }
+
+  const description = roleName
+    ? `${method} ${roleName}${value ? ` "${value}"` : ''}`
+    : `${method} on node ${nodeId}${value ? ` "${value}"` : ''}`
+
   const action: ActionStep = {
     method: method as ActionStep['method'],
     backendNodeId: nodeId,
-    roleName: '',
+    roleName,
     args: value ? [value] : undefined,
-    description: `${method} on node ${nodeId}`,
+    description,
   }
 
   const result = await executeAction(tabId, action)
