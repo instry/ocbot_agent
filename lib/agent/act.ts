@@ -476,6 +476,7 @@ export async function act(
   // 1. Check cache
   const cached = await cache.lookup(instruction, url)
   if (cached) {
+    console.log('[ocbot:act] cache hit, attempting self-heal...')
     // Try self-heal via xpath + roleName match first (no LLM needed)
     const snapshot = await capturePageSnapshot(tabId)
     const healed = await selfHealFromSnapshot(tabId, cached.actions, snapshot)
@@ -483,6 +484,7 @@ export async function act(
     if (healed) {
       const replay = await replayActions(tabId, healed, verifyClicks)
       if (replay.success) {
+        console.log('[ocbot:act] ✅ self-heal success')
         // Record alternative selectors for healed actions
         const withAlts = healed.map((h, idx) => recordAlternativeSelector(cached.actions[idx], h))
         const enriched = await enrichWithXPath(tabId, withAlts, snapshot)
@@ -499,7 +501,7 @@ export async function act(
 
     // Self-heal failed — fall through to full LLM re-inference
     logDebug('L1', 'Self-heal result', { success: false })
-    console.log('[ocbot] Cache self-heal failed, re-inferring...')
+    console.log('[ocbot:act] ❌ self-heal failed, re-inferring with LLM...')
     if (signal?.aborted) throw new Error('Aborted')
 
     const freshSnapshot = healed ? await capturePageSnapshot(tabId) : snapshot
@@ -521,11 +523,14 @@ export async function act(
   }
 
   // 2. Cache miss: snapshot → infer → execute → store (with xpath)
+  console.log('[ocbot:act] cache miss, inferring with LLM...')
   const snapshot = await capturePageSnapshot(tabId)
   if (signal?.aborted) throw new Error('Aborted')
 
   const inferred = await inferActions(instruction, snapshot, provider, signal, tabId)
+  console.log('[ocbot:act] inferred actions:', inferred.actions.map(a => `${a.method}(${a.roleName})`).join(', '))
   const result = await replayActions(tabId, inferred.actions, verifyClicks)
+  console.log(`[ocbot:act] replay result: ${result.success ? '✅' : '❌'}`)
 
   if (result.success) {
     const enriched = await enrichWithXPath(tabId, inferred.actions, snapshot)
