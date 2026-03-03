@@ -58,7 +58,7 @@ function NewSessionPage({
 
 export function App() {
   const [page, setPage] = useState<Page>(() => {
-    const hash = window.location.hash.replace('#/', '')
+    const hash = window.location.hash.replace('#/', '').split('?')[0]
     if (['skills', 'claw', 'settings', 'about'].includes(hash)) return hash as Page
     return 'new-session'
   })

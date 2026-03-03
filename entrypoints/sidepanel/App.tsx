@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Puzzle } from 'lucide-react'
+import { Puzzle, ExternalLink, X } from 'lucide-react'
 import { ChatArea } from '@/components/ChatArea'
 import { ChatInput } from '@/components/ChatInput'
 import type { ChatInputHandle } from '@/components/ChatInput'
@@ -25,6 +25,7 @@ export function App() {
   const [channelStatuses, setChannelStatuses] = useState<Record<string, ChannelStatus>>({})
   const [skillSaving, setSkillSaving] = useState(false)
   const [skillSaved, setSkillSaved] = useState(false)
+  const [savedSkillId, setSavedSkillId] = useState<string | null>(null)
   const pendingMessageRef = useRef<string | null>(null)
   const chatInputRef = useRef<ChatInputHandle>(null)
 
@@ -156,8 +157,9 @@ export function App() {
                 onClick={async () => {
                   setSkillSaving(true)
                   try {
-                    await saveAsSkill()
+                    const skill = await saveAsSkill()
                     setSkillSaved(true)
+                    if (skill) setSavedSkillId(skill.id)
                   } finally {
                     setSkillSaving(false)
                   }
@@ -177,7 +179,30 @@ export function App() {
           {skillSaved && (
             <div className="mx-3 my-2 flex items-center gap-2 rounded-xl border border-green-500/30 bg-green-500/5 px-3 py-2 text-sm text-green-600 dark:text-green-400">
               <Puzzle className="h-4 w-4 shrink-0" />
-              Skill saved successfully!
+              <span className="flex-1">Skill saved successfully!</span>
+              {savedSkillId && (
+                <button
+                  onClick={async () => {
+                    const url = chrome.runtime.getURL(`home.html#/skills?id=${savedSkillId}`)
+                    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+                    if (tab?.id) {
+                      await chrome.tabs.update(tab.id, { url })
+                    } else {
+                      await chrome.tabs.create({ url })
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium hover:bg-green-500/10"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  View
+                </button>
+              )}
+              <button
+                onClick={() => setSkillSaved(false)}
+                className="rounded-lg p-1 hover:bg-green-500/10"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             </div>
           )}
           {messages.length === 0 && !isLoading && (

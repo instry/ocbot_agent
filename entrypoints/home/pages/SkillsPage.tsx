@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Search, ChevronLeft, ChevronRight, BadgeCheck, GitFork } from 'lucide-react'
-import { MOCK_SKILLS, getSkillAbbr, getLocalSkills, deleteLocalSkill, type Skill } from '../data/skills'
+import { MOCK_SKILLS, getSkillAbbr, getLocalSkills, getLocalSkillDetail, deleteLocalSkill, type Skill } from '../data/skills'
 import { SkillDetailPage } from './SkillDetailPage'
 import { SkillEditPage } from './SkillEditPage'
 
@@ -102,6 +102,21 @@ export function SkillsPage() {
 
   useEffect(() => {
     getLocalSkills().then(setMySkills)
+  }, [])
+
+  // Auto-open skill detail if URL has ?id= parameter
+  useEffect(() => {
+    const hash = window.location.hash // e.g. #/skills?id=xxx
+    const match = hash.match(/[?&]id=([^&]+)/)
+    if (match) {
+      const skillId = decodeURIComponent(match[1])
+      setActiveTab('my-skills')
+      getLocalSkillDetail(skillId).then((detail) => {
+        if (detail) setSelectedSkill(detail)
+        // Clean up URL after loading
+        history.replaceState(null, '', '#/skills')
+      })
+    }
   }, [])
 
   const refreshMySkills = useCallback(() => {
