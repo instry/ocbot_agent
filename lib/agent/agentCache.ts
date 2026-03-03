@@ -124,11 +124,14 @@ export interface ReplayCallbacks {
 
 const SKIP_TYPES = new Set(['ariaTree', 'think', 'extract', 'observe'])
 
+export type HealFn = (failedStep: AgentReplayStep, stepIndex: number) => Promise<AgentReplayStep | null>
+
 export async function replayAgentSteps(
   steps: AgentReplayStep[],
   executeToolFn: (name: string, argsJson: string) => Promise<string>,
   callbacks: ReplayCallbacks,
   signal?: AbortSignal,
+  healFn?: HealFn,
 ): Promise<ReplayResult> {
   const healEvents: HealEvent[] = []
 
@@ -171,6 +174,27 @@ export async function replayAgentSteps(
       // Check if the result indicates failure
       const parsed = tryParseJson(result)
       if (parsed && parsed.success === false) {
+        // L2 heal: try healFn before giving up
+        if (healFn) {
+          const healStart = Date.now()
+          const healed = await healFn(step, i)
+          if (healed) {
+            // L2 heal succeeded — record event and continue
+            healEvents.push({
+              stepIndex: i,
+              level: 2,
+              reason: 'l2_step_reinference',
+              resolved: true,
+              tokenCost: 500,
+              durationMs: Date.now() - healStart,
+            })
+            // Update step in-place for evolution
+            steps[i] = healed
+            callbacks.onStepEnd(i, healed, JSON.stringify({ success: true, healed: true }))
+            continue
+          }
+        }
+
         healEvents.push({
           stepIndex: i,
           level: 0,
@@ -197,6 +221,25 @@ export async function replayAgentSteps(
 
       callbacks.onStepEnd(i, step, result)
     } catch (err: unknown) {
+      // L2 heal on exception too
+      if (healFn) {
+        const healStart = Date.now()
+        const healed = await healFn(step, i)
+        if (healed) {
+          healEvents.push({
+            stepIndex: i,
+            level: 2,
+            reason: 'l2_step_reinference',
+            resolved: true,
+            tokenCost: 500,
+            durationMs: Date.now() - healStart,
+          })
+          steps[i] = healed
+          callbacks.onStepEnd(i, healed, JSON.stringify({ success: true, healed: true }))
+          continue
+        }
+      }
+
       healEvents.push({
         stepIndex: i,
         level: 0,

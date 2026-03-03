@@ -10,6 +10,8 @@ export interface PageElement {
   focused?: boolean
   value?: string
   description?: string
+  className?: string
+  testId?: string
 }
 
 export interface PageSnapshot {
@@ -148,6 +150,28 @@ export async function capturePageSnapshot(tabId: number): Promise<PageSnapshot> 
 
     // Cap at 500 elements
     if (elements.length >= 500) break
+  }
+
+  // Enrich interactable elements with DOM attributes (className, data-testid)
+  // Best-effort, cap at 100 elements to limit performance impact
+  const interactableElements = elements.filter((el) => el.interactable).slice(0, 100)
+  for (const el of interactableElements) {
+    try {
+      const { node } = await sendCdp<{
+        node: { attributes?: string[] }
+      }>(tabId, 'DOM.describeNode', { backendNodeId: el.backendNodeId })
+
+      if (node.attributes) {
+        for (let i = 0; i < node.attributes.length; i += 2) {
+          const attrName = node.attributes[i]
+          const attrValue = node.attributes[i + 1]
+          if (attrName === 'class') el.className = attrValue
+          if (attrName === 'data-testid') el.testId = attrValue
+        }
+      }
+    } catch {
+      // Best effort — skip on failure
+    }
   }
 
   // Get page URL and title

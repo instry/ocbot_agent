@@ -8,6 +8,8 @@ import type { Skill, SkillExecution, SkillRunCallbacks, SkillRunResult } from '.
 import { replayAgentSteps } from '@/lib/agent/agentCache'
 import { runAgentLoop } from '@/lib/agent/loop'
 import { SkillStore } from './store'
+import { healStep, healSegment } from './heal'
+import { getFragileStepIndices } from './fragility'
 
 /**
  * Replace `%paramName%` placeholders in a string with parameter values.
@@ -123,24 +125,81 @@ export class SkillRunner {
       onSkip: () => { /* no-op */ },
     }
 
-    const replayResult = await replayAgentSteps(steps, executeForReplay, replayCallbacks, signal)
+    // L2 heal function: re-infer a single failed step via LLM
+    const healFn = async (failedStep: AgentReplayStep, _stepIndex: number) => {
+      return healStep(failedStep, provider)
+    }
+
+    const replayResult = await replayAgentSteps(steps, executeForReplay, replayCallbacks, signal, healFn)
 
     // Notify heal events
     for (const event of replayResult.healEvents) {
       callbacks.onHeal(event)
     }
 
+    // L3: If replay failed (L2 already tried via healFn), attempt segment repair
+    if (!replayResult.success) {
+      const l3Steps = await healSegment(steps, replayResult.failedIndex, skill.skillMd, provider)
+
+      if (l3Steps && l3Steps.length > 0) {
+        // Execute L3 re-planned steps via replay (with L2 heal enabled)
+        const l3ReplayResult = await replayAgentSteps(l3Steps, executeForReplay, replayCallbacks, signal, healFn)
+
+        for (const event of l3ReplayResult.healEvents) {
+          callbacks.onHeal({ ...event, level: Math.max(event.level, 3) })
+        }
+
+        if (l3ReplayResult.success) {
+          // Merge completed original steps + L3 steps for evolution
+          const mergedSteps = [...steps.slice(0, replayResult.failedIndex), ...l3Steps]
+          const result: SkillRunResult = {
+            success: true,
+            track: 'fast',
+            healEvents: [
+              ...replayResult.healEvents,
+              {
+                stepIndex: replayResult.failedIndex,
+                level: 3,
+                reason: 'l3_segment_repair',
+                resolved: true,
+                tokenCost: 2000,
+                durationMs: Date.now() - startTime,
+              },
+              ...l3ReplayResult.healEvents,
+            ],
+            completedSteps: mergedSteps.length,
+            totalSteps: mergedSteps.length,
+            durationMs: Date.now() - startTime,
+            updatedSteps: mergedSteps,
+          }
+          // Evolve with new steps (version bump)
+          await this.evolveSkill(skill, mergedSteps)
+          return result
+        }
+      }
+
+      // L3 also failed — return original failure
+      return {
+        success: false,
+        track: 'fast' as const,
+        healEvents: replayResult.healEvents,
+        completedSteps: replayResult.failedIndex,
+        totalSteps: steps.length,
+        durationMs: Date.now() - startTime,
+      }
+    }
+
     const result: SkillRunResult = {
-      success: replayResult.success,
+      success: true,
       track: 'fast',
       healEvents: replayResult.healEvents,
-      completedSteps: replayResult.success ? steps.length : replayResult.failedIndex,
+      completedSteps: steps.length,
       totalSteps: steps.length,
       durationMs: Date.now() - startTime,
     }
 
     // Evolution: if successful with heal events, update skill steps
-    if (replayResult.success && replayResult.healEvents.length > 0) {
+    if (replayResult.healEvents.length > 0) {
       result.updatedSteps = steps
       await this.evolveSkill(skill, steps)
     }
@@ -258,12 +317,16 @@ export class SkillRunner {
       status = 'degraded'
     }
 
+    // Compute fragile steps
+    const fragileSteps = getFragileStepIndices(executions, skill.steps.length)
+
     const updated: Skill = {
       ...skill,
       totalRuns,
       successCount,
       score,
       status,
+      fragileSteps,
       updatedAt: Date.now(),
     }
     await this.store.save(updated)

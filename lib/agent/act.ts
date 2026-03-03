@@ -1,9 +1,15 @@
 import type { LlmProvider } from '../llm/types'
-import type { ActCache, ActionStep } from './cache'
+import type { ActCache, ActionStep, AlternativeSelector } from './cache'
 import { buildRoleName, fuzzyMatchByRoleName } from './cache'
 import { capturePageSnapshot, type PageSnapshot } from './snapshot'
 import { inferActions } from './inference'
 import { ensureAttached, sendCdp } from './cdp'
+import { diffTrees } from './diff'
+
+export interface ActOptions {
+  /** When true, verify click actions had an effect via diffTrees */
+  skillReplay?: boolean
+}
 
 export interface ActResult {
   success: boolean
@@ -11,6 +17,8 @@ export interface ActResult {
   description: string
   cacheHit: boolean
   selfHealed: boolean
+  /** Set when a click action had no observable effect (only during skillReplay) */
+  noEffect?: boolean
 }
 
 async function getActiveTabId(): Promise<number> {
@@ -107,16 +115,29 @@ async function findByXPath(
 }
 
 /**
- * Enrich actions with XPath for stable cross-session selectors.
+ * Enrich actions with XPath and DOM attributes for stable cross-session selectors.
  */
 async function enrichWithXPath(
   tabId: number,
   actions: ActionStep[],
+  snapshot?: PageSnapshot,
 ): Promise<ActionStep[]> {
   const enriched: ActionStep[] = []
   for (const action of actions) {
     const xpath = await resolveXPath(tabId, action.backendNodeId)
-    enriched.push({ ...action, xpath: xpath ?? undefined })
+    let className = action.className
+    let testId = action.testId
+
+    // If snapshot available, copy DOM attributes from matching element
+    if (snapshot) {
+      const el = snapshot.elements.find((e) => e.backendNodeId === action.backendNodeId)
+      if (el) {
+        if (el.className) className = el.className
+        if (el.testId) testId = el.testId
+      }
+    }
+
+    enriched.push({ ...action, xpath: xpath ?? undefined, className, testId })
   }
   return enriched
 }
@@ -255,11 +276,37 @@ async function executeAction(
 async function replayActions(
   tabId: number,
   actions: ActionStep[],
-): Promise<{ success: boolean; failedIndex: number }> {
+  verifyClicks?: boolean,
+): Promise<{ success: boolean; failedIndex: number; noEffect?: boolean }> {
   for (let i = 0; i < actions.length; i++) {
+    // Capture snapshot before click if verification is enabled
+    let beforeSnapshot: PageSnapshot | undefined
+    if (verifyClicks && actions[i].method === 'click') {
+      try {
+        beforeSnapshot = await capturePageSnapshot(tabId)
+      } catch {
+        // Best effort
+      }
+    }
+
     const result = await executeAction(tabId, actions[i])
     if (!result.success) {
       return { success: false, failedIndex: i }
+    }
+
+    // Verify click had an effect
+    if (beforeSnapshot && actions[i].method === 'click') {
+      try {
+        // Small delay to let DOM settle
+        await new Promise((r) => setTimeout(r, 200))
+        const afterSnapshot = await capturePageSnapshot(tabId)
+        const diff = diffTrees(beforeSnapshot, afterSnapshot)
+        if (!diff.changed && !diff.urlChanged) {
+          return { success: false, failedIndex: i, noEffect: true }
+        }
+      } catch {
+        // Best effort — don't fail on diff errors
+      }
     }
   }
   return { success: true, failedIndex: -1 }
@@ -268,7 +315,9 @@ async function replayActions(
 /**
  * Try to self-heal cached actions by:
  * 1. XPath lookup (stable across page loads)
- * 2. Fuzzy roleName matching in current AXTree
+ * 2. testId matching (most stable DOM selector)
+ * 3. Fuzzy roleName matching in current AXTree
+ * 4. Alternative selectors (historically successful selectors)
  * Returns updated actions with new backendNodeIds, or null if matching fails.
  */
 async function selfHealFromSnapshot(
@@ -286,15 +335,90 @@ async function selfHealFromSnapshot(
         continue
       }
     }
+
+    // Try testId match (very stable)
+    if (action.testId) {
+      const match = snapshot.elements.find(
+        (el) => el.testId === action.testId && el.interactable,
+      )
+      if (match) {
+        healed.push({ ...action, backendNodeId: match.backendNodeId })
+        continue
+      }
+    }
+
     // Fallback to roleName fuzzy match
     const match = fuzzyMatchByRoleName(action.roleName, snapshot.elements)
-    if (!match) return null
-    healed.push({
-      ...action,
-      backendNodeId: match.backendNodeId,
-    })
+    if (match) {
+      healed.push({
+        ...action,
+        backendNodeId: match.backendNodeId,
+      })
+      continue
+    }
+
+    // Try alternative selectors (LRU, cap at 5)
+    if (action.alternativeSelectors && action.alternativeSelectors.length > 0) {
+      const alts = [...action.alternativeSelectors]
+        .sort((a, b) => b.lastSuccessAt - a.lastSuccessAt)
+        .slice(0, 5)
+
+      let found = false
+      for (const alt of alts) {
+        // Try xpath
+        if (alt.xpath) {
+          const nodeId = await findByXPath(tabId, alt.xpath)
+          if (nodeId) {
+            healed.push({ ...action, backendNodeId: nodeId })
+            found = true
+            break
+          }
+        }
+        // Try roleName
+        const altMatch = fuzzyMatchByRoleName(alt.roleName, snapshot.elements)
+        if (altMatch) {
+          healed.push({ ...action, backendNodeId: altMatch.backendNodeId })
+          found = true
+          break
+        }
+      }
+      if (found) continue
+    }
+
+    return null
   }
   return healed
+}
+
+/**
+ * After a successful self-heal, record the original (now-outdated) selector as an alternative.
+ * This handles pages that alternate between layouts.
+ */
+function recordAlternativeSelector(
+  originalAction: ActionStep,
+  healedAction: ActionStep,
+): ActionStep {
+  // If the selector didn't change, no need to record
+  if (originalAction.xpath === healedAction.xpath && originalAction.roleName === healedAction.roleName) {
+    return healedAction
+  }
+
+  const alt: AlternativeSelector = {
+    xpath: originalAction.xpath || '',
+    roleName: originalAction.roleName,
+    lastSuccessAt: Date.now(),
+  }
+
+  const existing = healedAction.alternativeSelectors || []
+  // Avoid duplicates
+  const isDuplicate = existing.some(
+    (a) => a.xpath === alt.xpath && a.roleName === alt.roleName,
+  )
+  if (isDuplicate) return healedAction
+
+  // Cap at 5 alternatives (LRU)
+  const updated = [alt, ...existing].slice(0, 5)
+  return { ...healedAction, alternativeSelectors: updated }
 }
 
 export async function act(
@@ -302,10 +426,12 @@ export async function act(
   provider: LlmProvider,
   cache: ActCache,
   signal?: AbortSignal,
+  options?: ActOptions,
 ): Promise<ActResult> {
   const tabId = await getActiveTabId()
   const url = await getActiveTabUrl()
   await ensureAttached(tabId)
+  const verifyClicks = options?.skillReplay ?? false
 
   // 1. Check cache
   const cached = await cache.lookup(instruction, url)
@@ -315,9 +441,11 @@ export async function act(
     const healed = await selfHealFromSnapshot(tabId, cached.actions, snapshot)
 
     if (healed) {
-      const replay = await replayActions(tabId, healed)
+      const replay = await replayActions(tabId, healed, verifyClicks)
       if (replay.success) {
-        const enriched = await enrichWithXPath(tabId, healed)
+        // Record alternative selectors for healed actions
+        const withAlts = healed.map((h, idx) => recordAlternativeSelector(cached.actions[idx], h))
+        const enriched = await enrichWithXPath(tabId, withAlts, snapshot)
         await cache.update(instruction, url, enriched)
         return {
           success: true,
@@ -335,10 +463,10 @@ export async function act(
 
     const freshSnapshot = healed ? await capturePageSnapshot(tabId) : snapshot
     const inferred = await inferActions(instruction, freshSnapshot, provider, signal)
-    const healReplay = await replayActions(tabId, inferred.actions)
+    const healReplay = await replayActions(tabId, inferred.actions, verifyClicks)
 
     if (healReplay.success) {
-      const enriched = await enrichWithXPath(tabId, inferred.actions)
+      const enriched = await enrichWithXPath(tabId, inferred.actions, freshSnapshot)
       await cache.update(instruction, url, enriched)
     }
 
@@ -356,10 +484,10 @@ export async function act(
   if (signal?.aborted) throw new Error('Aborted')
 
   const inferred = await inferActions(instruction, snapshot, provider, signal)
-  const result = await replayActions(tabId, inferred.actions)
+  const result = await replayActions(tabId, inferred.actions, verifyClicks)
 
   if (result.success) {
-    const enriched = await enrichWithXPath(tabId, inferred.actions)
+    const enriched = await enrichWithXPath(tabId, inferred.actions, snapshot)
     await cache.store(instruction, url, enriched, inferred.description)
   }
 

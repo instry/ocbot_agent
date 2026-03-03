@@ -104,12 +104,14 @@ export class SkillStore {
   /**
    * Compute a composite score from execution history.
    *
-   * Formula: successRate * 0.4 + stability * 0.25 + efficiency * 0.2 + satisfaction * 0.15
+   * Formula: successRate * 0.35 + stability * 0.25 + efficiency * 0.15
+   *        + satisfaction * 0.15 + usageFrequency * 0.10
    *
    * - successRate: success/total over recent 20 executions
    * - stability: 1 - (executions needing L2+ heal / total recent)
    * - efficiency: 1 - (avg heal level / 4)
    * - satisfaction: good / (good + bad), default 0.5 if no feedback
+   * - usageFrequency: min(1, total executions / 50) — rewards frequently used skills
    */
   computeScore(executions: SkillExecution[]): number {
     if (executions.length === 0) return 0.5
@@ -140,11 +142,15 @@ export class SkillStore {
     const bad = recent.filter((e) => e.userFeedback === 'bad').length
     const satisfaction = good + bad > 0 ? good / (good + bad) : 0.5
 
+    // usageFrequency: normalized by 50 (saturates at 50 total executions)
+    const usageFrequency = Math.min(1, executions.length / 50)
+
     return (
-      successRate * 0.4 +
+      successRate * 0.35 +
       stability * 0.25 +
-      efficiency * 0.2 +
-      satisfaction * 0.15
+      efficiency * 0.15 +
+      satisfaction * 0.15 +
+      usageFrequency * 0.10
     )
   }
 }

@@ -31,6 +31,7 @@ export interface Skill {
   status: 'active' | 'degraded' | 'archived'
   totalRuns: number
   successCount: number
+  fragileSteps?: number[]
 }
 
 export interface SkillExecution {

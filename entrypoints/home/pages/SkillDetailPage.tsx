@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Star, GitFork, BadgeCheck, Play, Download, ImageOff, Trash2 } from 'lucide-react'
+import { ArrowLeft, Star, GitFork, BadgeCheck, Play, Download, ImageOff, Trash2, Pencil } from 'lucide-react'
 import { getSkillDetail, getLocalSkillDetail, getSkillAbbr, type Skill, type SkillDetail } from '../data/skills'
 
 function DetailIcon({ detail, className = 'h-16 w-16' }: { detail: SkillDetail; className?: string }) {
@@ -18,10 +18,11 @@ function formatCount(n: number): string {
   return n.toString()
 }
 
-export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplace', onRun, onDelete }: {
+export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplace', onRun, onDelete, onEdit }: {
   skill: Skill; onBack: () => void; backLabel?: string;
   onRun?: (skill: Skill) => void;
   onDelete?: (skillId: string) => void
+  onEdit?: (skillId: string) => void
 }) {
   const [detail, setDetail] = useState<SkillDetail | null>(null)
 
@@ -97,6 +98,15 @@ export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplac
               <Play className="h-4 w-4" />
               Run
             </button>
+            {onEdit && (
+              <button
+                onClick={() => onEdit(skill.id)}
+                className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/60 px-5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/80"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit
+              </button>
+            )}
             {onDelete && (
               <button
                 onClick={() => { onDelete(skill.id); onBack() }}

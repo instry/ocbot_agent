@@ -601,7 +601,8 @@ export function getSkillDetail(id: string): SkillDetail | null {
 }
 
 import { SkillStore } from '@/lib/skills/store'
-import type { Skill as RealSkill } from '@/lib/skills/types'
+import type { Skill as RealSkill, SkillExecution as RealSkillExecution } from '@/lib/skills/types'
+import { computeStepFragility, type StepFragility } from '@/lib/skills/fragility'
 
 // Convert internal Skill to display Skill format
 export function toDisplaySkill(real: RealSkill): Skill {
@@ -658,3 +659,24 @@ export async function deleteLocalSkill(id: string): Promise<void> {
 }
 
 export { skillStoreInstance }
+
+export async function getSkillExecutions(skillId: string): Promise<RealSkillExecution[]> {
+  return skillStoreInstance.getExecutions(skillId)
+}
+
+export async function getSkillFragility(skillId: string): Promise<StepFragility[]> {
+  const skill = await skillStoreInstance.get(skillId)
+  if (!skill) return []
+  const executions = await skillStoreInstance.getExecutions(skillId)
+  return computeStepFragility(executions, skill.steps.length)
+}
+
+export async function getRealSkill(skillId: string): Promise<RealSkill | null> {
+  return skillStoreInstance.get(skillId)
+}
+
+export async function saveRealSkill(skill: RealSkill): Promise<void> {
+  await skillStoreInstance.save(skill)
+}
+
+export type { RealSkill, RealSkillExecution, StepFragility }

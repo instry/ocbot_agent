@@ -1,5 +1,11 @@
 import type { PageElement } from './snapshot'
 
+export interface AlternativeSelector {
+  xpath: string
+  roleName: string
+  lastSuccessAt: number
+}
+
 export interface ActionStep {
   method: 'click' | 'type' | 'select' | 'press'
   backendNodeId: number
@@ -7,6 +13,9 @@ export interface ActionStep {
   roleName: string
   args?: string[]
   description: string
+  alternativeSelectors?: AlternativeSelector[]
+  className?: string
+  testId?: string
 }
 
 export interface CachedAction {

@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Search, ChevronLeft, ChevronRight, BadgeCheck, GitFork } from 'lucide-react'
 import { MOCK_SKILLS, getSkillAbbr, getLocalSkills, deleteLocalSkill, type Skill } from '../data/skills'
 import { SkillDetailPage } from './SkillDetailPage'
+import { SkillEditPage } from './SkillEditPage'
 
 const CATEGORIES = [
   'All',
@@ -93,6 +94,7 @@ export function SkillsPage() {
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [page, setPage] = useState(1)
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
+  const [editingSkillId, setEditingSkillId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'marketplace' | 'my-skills'>('marketplace')
   const PAGE_SIZE = 30
 
@@ -137,6 +139,16 @@ export function SkillsPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
+  if (editingSkillId) {
+    return (
+      <SkillEditPage
+        skillId={editingSkillId}
+        onBack={() => { setEditingSkillId(null); refreshMySkills() }}
+        onDeleted={refreshMySkills}
+      />
+    )
+  }
+
   if (selectedSkill) {
     return (
       <SkillDetailPage
@@ -145,6 +157,7 @@ export function SkillsPage() {
         backLabel={activeTab === 'my-skills' ? 'Back to My Skills' : 'Back to Marketplace'}
         onRun={handleRunSkill}
         onDelete={activeTab === 'my-skills' ? handleDeleteSkill : undefined}
+        onEdit={activeTab === 'my-skills' ? (id) => { setSelectedSkill(null); setEditingSkillId(id) } : undefined}
       />
     )
   }
