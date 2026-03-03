@@ -89,7 +89,7 @@ async function resolveXPath(
  * Find a DOM element by XPath and return its backendNodeId.
  * Returns null if the XPath doesn't match any element.
  */
-async function findByXPath(
+export async function findByXPath(
   tabId: number,
   xpath: string,
 ): Promise<number | null> {
@@ -428,6 +428,39 @@ function recordAlternativeSelector(
   return { ...healedAction, alternativeSelectors: updated }
 }
 
+/**
+ * Direct node execution — bypasses LLM inference entirely.
+ * Used when the agent already knows the nodeId from ariaTree.
+ */
+export async function actDirect(
+  nodeId: number,
+  method: string,
+  value?: string,
+  cache?: ActCache,
+  signal?: AbortSignal,
+  options?: ActOptions,
+): Promise<ActResult> {
+  const tabId = await getActiveTabId()
+  await ensureAttached(tabId)
+
+  const action: ActionStep = {
+    method: method as ActionStep['method'],
+    backendNodeId: nodeId,
+    roleName: '',
+    args: value ? [value] : undefined,
+    description: `${method} on node ${nodeId}`,
+  }
+
+  const result = await executeAction(tabId, action)
+  return {
+    success: result.success,
+    actions: [action],
+    description: action.description,
+    cacheHit: false,
+    selfHealed: false,
+  }
+}
+
 export async function act(
   instruction: string,
   provider: LlmProvider,
@@ -470,7 +503,7 @@ export async function act(
     if (signal?.aborted) throw new Error('Aborted')
 
     const freshSnapshot = healed ? await capturePageSnapshot(tabId) : snapshot
-    const inferred = await inferActions(instruction, freshSnapshot, provider, signal)
+    const inferred = await inferActions(instruction, freshSnapshot, provider, signal, tabId)
     const healReplay = await replayActions(tabId, inferred.actions, verifyClicks)
 
     if (healReplay.success) {
@@ -491,7 +524,7 @@ export async function act(
   const snapshot = await capturePageSnapshot(tabId)
   if (signal?.aborted) throw new Error('Aborted')
 
-  const inferred = await inferActions(instruction, snapshot, provider, signal)
+  const inferred = await inferActions(instruction, snapshot, provider, signal, tabId)
   const result = await replayActions(tabId, inferred.actions, verifyClicks)
 
   if (result.success) {

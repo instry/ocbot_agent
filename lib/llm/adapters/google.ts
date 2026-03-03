@@ -1,4 +1,4 @@
-import type { ProviderAdapter, LlmProvider, LlmRequestMessage, ToolDefinition, LlmStreamEvent } from '../types'
+import type { ProviderAdapter, LlmProvider, LlmRequestMessage, ToolDefinition, LlmStreamEvent, ContentPart } from '../types'
 
 function convertMessages(messages: LlmRequestMessage[]) {
   const contents: unknown[] = []
@@ -39,6 +39,18 @@ function convertMessages(messages: LlmRequestMessage[]) {
       continue
     }
 
+    if (Array.isArray(m.content)) {
+      contents.push({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: (m.content as ContentPart[]).map(p =>
+          p.type === 'image'
+            ? { inlineData: { mimeType: p.mediaType, data: p.data } }
+            : { text: p.text }
+        ),
+      })
+      continue
+    }
+
     contents.push({
       role: m.role === 'user' ? 'user' : 'model',
       parts: [{ text: m.content || '' }],
@@ -68,7 +80,10 @@ export const googleAdapter: ProviderAdapter = {
     }
 
     if (systemMsg?.content) {
-      body.systemInstruction = { parts: [{ text: systemMsg.content }] }
+      const systemText = typeof systemMsg.content === 'string'
+        ? systemMsg.content
+        : (systemMsg.content as ContentPart[])?.find(p => p.type === 'text')?.text || ''
+      body.systemInstruction = { parts: [{ text: systemText }] }
     }
 
     if (tools?.length) {

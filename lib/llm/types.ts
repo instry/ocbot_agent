@@ -58,6 +58,21 @@ export interface ToolDefinition {
   }
 }
 
+// --- Multimodal content parts ---
+
+export interface TextPart {
+  type: 'text'
+  text: string
+}
+
+export interface ImagePart {
+  type: 'image'
+  mediaType: 'image/jpeg' | 'image/png' | 'image/webp'
+  data: string // base64
+}
+
+export type ContentPart = TextPart | ImagePart
+
 // --- LLM request/response message types ---
 
 export interface ToolCallPart {
@@ -68,7 +83,7 @@ export interface ToolCallPart {
 
 export interface LlmRequestMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
-  content?: string
+  content?: string | ContentPart[]
   toolCalls?: ToolCallPart[]
   toolCallId?: string
   reasoningContent?: string

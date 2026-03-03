@@ -1,4 +1,4 @@
-import type { ProviderAdapter, LlmProvider, LlmRequestMessage, ToolDefinition, LlmStreamEvent } from '../types'
+import type { ProviderAdapter, LlmProvider, LlmRequestMessage, ToolDefinition, LlmStreamEvent, ContentPart } from '../types'
 
 function convertMessages(messages: LlmRequestMessage[]) {
   return messages
@@ -31,6 +31,16 @@ function convertMessages(messages: LlmRequestMessage[]) {
           }],
         }
       }
+      if (Array.isArray(m.content)) {
+        return {
+          role: m.role as 'user' | 'assistant',
+          content: (m.content as ContentPart[]).map(p =>
+            p.type === 'image'
+              ? { type: 'image' as const, source: { type: 'base64' as const, media_type: p.mediaType, data: p.data } }
+              : { type: 'text' as const, text: p.text }
+          ),
+        }
+      }
       return { role: m.role as 'user' | 'assistant', content: m.content || '' }
     })
 }
@@ -56,7 +66,9 @@ export const anthropicAdapter: ProviderAdapter = {
     }
 
     if (systemMsg?.content) {
-      body.system = systemMsg.content
+      body.system = typeof systemMsg.content === 'string'
+        ? systemMsg.content
+        : (systemMsg.content as ContentPart[])?.find(p => p.type === 'text')?.text || ''
     }
 
     if (tools?.length) {

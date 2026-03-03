@@ -1,7 +1,8 @@
-import type { LlmProvider, LlmRequestMessage } from '../llm/types'
+import type { LlmProvider, LlmRequestMessage, ContentPart } from '../llm/types'
 import type { PageSnapshot } from './snapshot'
 import type { ActionStep } from './cache'
 import { buildRoleName } from './cache'
+import { ensureAttached, sendCdp } from './cdp'
 import { streamChat } from '../llm/client'
 
 // --- Types ---
@@ -44,6 +45,7 @@ Rules:
 - For "click": no args needed
 - Return actions in execution order
 - Be precise — pick the most specific matching element
+- If a screenshot is provided, use it to visually verify which element matches the instruction. The screenshot shows the actual rendered page — use it to disambiguate similar elements, identify icon-only buttons, and confirm element positions.
 
 Respond with ONLY valid JSON, no markdown fences:
 {"actions":[{"method":"click"|"type"|"select"|"press","nodeId":42,"args":["..."],"description":"..."}],"description":"overall description"}`
@@ -71,17 +73,29 @@ Rules:
 Respond with ONLY valid JSON, no markdown fences:
 {"actions":[{"description":"...","nodeId":42,"method":"click"|"type"|"select"|"press"}]}`
 
+// --- Screenshot helper ---
+
+async function captureScreenshot(tabId: number): Promise<string> {
+  await ensureAttached(tabId)
+  const { data } = await sendCdp<{ data: string }>(tabId, 'Page.captureScreenshot', {
+    format: 'jpeg',
+    quality: 70,
+    optimizeForSpeed: true,
+  })
+  return data
+}
+
 // --- LLM call helpers ---
 
 async function callLlm(
   provider: LlmProvider,
   systemPrompt: string,
-  userPrompt: string,
+  userContent: string | ContentPart[],
   signal?: AbortSignal,
 ): Promise<string> {
   const messages: LlmRequestMessage[] = [
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: userPrompt },
+    { role: 'user', content: userContent },
   ]
 
   let result = ''
@@ -111,11 +125,23 @@ export async function inferActions(
   snapshot: PageSnapshot,
   provider: LlmProvider,
   signal?: AbortSignal,
+  tabId?: number,
 ): Promise<InferredActions> {
   const snapshotText = formatSnapshotForPrompt(snapshot)
-  const userPrompt = `## Page Snapshot\n${snapshotText}\n\n## Instruction\n${instruction}`
+  const textPrompt = `## Page Snapshot\n${snapshotText}\n\n## Instruction\n${instruction}`
 
-  const raw = await callLlm(provider, ACT_SYSTEM, userPrompt, signal)
+  let userContent: string | ContentPart[] = textPrompt
+  if (tabId) {
+    try {
+      const screenshotData = await captureScreenshot(tabId)
+      userContent = [
+        { type: 'image', mediaType: 'image/jpeg', data: screenshotData },
+        { type: 'text', text: textPrompt },
+      ]
+    } catch { /* fallback to text-only */ }
+  }
+
+  const raw = await callLlm(provider, ACT_SYSTEM, userContent, signal)
   const parsed = parseJsonResponse<{
     actions: Array<{ method: string; nodeId: number; args?: string[]; description: string }>
     description: string
