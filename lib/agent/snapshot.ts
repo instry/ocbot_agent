@@ -1,4 +1,5 @@
 import { ensureAttached, sendCdp } from './cdp'
+import { logDebug } from '@/lib/debug/eventLog'
 
 export interface PageElement {
   encodedId: string
@@ -155,6 +156,7 @@ export async function capturePageSnapshot(tabId: number): Promise<PageSnapshot> 
   // Enrich interactable elements with DOM attributes (className, data-testid)
   // Best-effort, cap at 100 elements to limit performance impact
   const interactableElements = elements.filter((el) => el.interactable).slice(0, 100)
+  logDebug('selector', 'Enriched elements', { count: interactableElements.length })
   for (const el of interactableElements) {
     try {
       const { node } = await sendCdp<{

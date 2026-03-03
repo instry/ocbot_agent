@@ -5,6 +5,7 @@ import { capturePageSnapshot, type PageSnapshot } from './snapshot'
 import { inferActions } from './inference'
 import { ensureAttached, sendCdp } from './cdp'
 import { diffTrees } from './diff'
+import { logDebug } from '@/lib/debug/eventLog'
 
 export interface ActOptions {
   /** When true, verify click actions had an effect via diffTrees */
@@ -302,8 +303,10 @@ async function replayActions(
         const afterSnapshot = await capturePageSnapshot(tabId)
         const diff = diffTrees(beforeSnapshot, afterSnapshot)
         if (!diff.changed && !diff.urlChanged) {
+          logDebug('diff', 'Click effect', { changed: false })
           return { success: false, failedIndex: i, noEffect: true }
         }
+        logDebug('diff', 'Click effect', { changed: true })
       } catch {
         // Best effort — don't fail on diff errors
       }
@@ -331,9 +334,11 @@ async function selfHealFromSnapshot(
     if (action.xpath) {
       const nodeId = await findByXPath(tabId, action.xpath)
       if (nodeId) {
+        logDebug('selector', 'XPath match', { hit: true, xpath: action.xpath })
         healed.push({ ...action, backendNodeId: nodeId })
         continue
       }
+      logDebug('selector', 'XPath match', { hit: false, xpath: action.xpath })
     }
 
     // Try testId match (very stable)
@@ -342,6 +347,7 @@ async function selfHealFromSnapshot(
         (el) => el.testId === action.testId && el.interactable,
       )
       if (match) {
+        logDebug('selector', 'testId match', { testId: action.testId })
         healed.push({ ...action, backendNodeId: match.backendNodeId })
         continue
       }
@@ -359,6 +365,7 @@ async function selfHealFromSnapshot(
 
     // Try alternative selectors (LRU, cap at 5)
     if (action.alternativeSelectors && action.alternativeSelectors.length > 0) {
+      logDebug('selector', 'Trying alternatives', { count: action.alternativeSelectors.length })
       const alts = [...action.alternativeSelectors]
         .sort((a, b) => b.lastSuccessAt - a.lastSuccessAt)
         .slice(0, 5)
@@ -458,6 +465,7 @@ export async function act(
     }
 
     // Self-heal failed — fall through to full LLM re-inference
+    logDebug('L1', 'Self-heal result', { success: false })
     console.log('[ocbot] Cache self-heal failed, re-inferring...')
     if (signal?.aborted) throw new Error('Aborted')
 

@@ -1,5 +1,6 @@
 import type { ActionStep } from './cache'
 import type { FormField } from './fillForm'
+import { logDebug } from '@/lib/debug/eventLog'
 
 // --- Types ---
 
@@ -176,9 +177,11 @@ export async function replayAgentSteps(
       if (parsed && parsed.success === false) {
         // L2 heal: try healFn before giving up
         if (healFn) {
+          logDebug('L2', 'Attempting L2 heal', { stepIndex: i, stepType: step.type })
           const healStart = Date.now()
           const healed = await healFn(step, i)
           if (healed) {
+            logDebug('L2', 'L2 heal result', { resolved: true, stepIndex: i })
             // L2 heal succeeded — record event and continue
             healEvents.push({
               stepIndex: i,

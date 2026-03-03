@@ -6,6 +6,7 @@ import type { PageSnapshot } from '@/lib/agent/snapshot'
 import { capturePageSnapshot } from '@/lib/agent/snapshot'
 import { buildRoleName } from '@/lib/agent/cache'
 import { streamChat } from '@/lib/llm/client'
+import { logDebug } from '@/lib/debug/eventLog'
 
 // --- Helpers ---
 
@@ -84,12 +85,14 @@ export async function healStep(
   if (failedStep.type !== 'act' && failedStep.type !== 'fillForm') return null
 
   try {
-    const tabId = await getActiveTabId()
-    const snapshot = await capturePageSnapshot(tabId)
-
     const instruction = failedStep.type === 'act'
       ? failedStep.instruction
       : `Fill form fields: ${failedStep.fields.map(f => `${f.field}: ${f.value}`).join(', ')}`
+
+    logDebug('L2', 'Re-inferring step', { instruction })
+
+    const tabId = await getActiveTabId()
+    const snapshot = await capturePageSnapshot(tabId)
 
     const snapshotText = formatSnapshotForPrompt(snapshot)
     const userPrompt = `## Page Snapshot\n${snapshotText}\n\n## Failed Step Instruction\n${instruction}`
@@ -119,16 +122,25 @@ export async function healStep(
     if (failedStep.type === 'act') {
       const result = await executeTool('act', JSON.stringify({ instruction }), provider, undefined as never, undefined, undefined)
       const resultParsed = JSON.parse(result)
-      if (resultParsed.success === false) return null
+      if (resultParsed.success === false) {
+        logDebug('L2', 'healStep done', { success: false })
+        return null
+      }
+      logDebug('L2', 'healStep done', { success: true })
       return { ...failedStep, actions: resultParsed.actions ?? actions }
     }
 
     // For fillForm, re-execute with original fields
     const result = await executeTool('fillForm', JSON.stringify({ fields: failedStep.fields }), provider, undefined as never, undefined, undefined)
     const resultParsed = JSON.parse(result)
-    if (resultParsed.success === false) return null
+    if (resultParsed.success === false) {
+      logDebug('L2', 'healStep done', { success: false })
+      return null
+    }
+    logDebug('L2', 'healStep done', { success: true })
     return { ...failedStep, actions: resultParsed.actions ?? actions }
   } catch {
+    logDebug('L2', 'healStep done', { success: false, error: true })
     return null
   }
 }
@@ -168,6 +180,8 @@ export async function healSegment(
   provider: LlmProvider,
 ): Promise<AgentReplayStep[] | null> {
   try {
+    logDebug('L3', 'Re-planning segment', { failedIndex })
+
     const tabId = await getActiveTabId()
     const snapshot = await capturePageSnapshot(tabId)
 
@@ -209,8 +223,10 @@ export async function healSegment(
       }
     })
 
+    logDebug('L3', 'healSegment done', { stepCount: newSteps.length })
     return newSteps
   } catch {
+    logDebug('L3', 'healSegment done', { stepCount: 0, error: true })
     return null
   }
 }

@@ -10,6 +10,7 @@ import { runAgentLoop } from '@/lib/agent/loop'
 import { SkillStore } from './store'
 import { healStep, healSegment } from './heal'
 import { getFragileStepIndices } from './fragility'
+import { logDebug } from '@/lib/debug/eventLog'
 
 /**
  * Replace `%paramName%` placeholders in a string with parameter values.
@@ -74,6 +75,7 @@ export class SkillRunner {
 
     // --- Fast Track ---
     if (skill.steps.length > 0) {
+      logDebug('execution', 'Track: fast')
       result = await this.runFastTrack(skill, parameters, provider, cache, callbacks, signal, variables)
 
       if (result.success) {
@@ -92,6 +94,7 @@ export class SkillRunner {
     }
 
     // --- Agent Track (no steps available) ---
+    logDebug('execution', 'Track: agent')
     result = await this.runAgentTrack(skill, parameters, provider, cache, callbacks, signal, variables)
     result.durationMs = Date.now() - startTime
     await this.recordExecution(skill, parameters, result)
@@ -139,6 +142,7 @@ export class SkillRunner {
 
     // L3: If replay failed (L2 already tried via healFn), attempt segment repair
     if (!replayResult.success) {
+      logDebug('L3', 'Attempting segment repair', { failedIndex: replayResult.failedIndex })
       const l3Steps = await healSegment(steps, replayResult.failedIndex, skill.skillMd, provider)
 
       if (l3Steps && l3Steps.length > 0) {
@@ -319,6 +323,9 @@ export class SkillRunner {
 
     // Compute fragile steps
     const fragileSteps = getFragileStepIndices(executions, skill.steps.length)
+    if (fragileSteps.length > 0) {
+      logDebug('fragility', 'Fragile steps', { indices: fragileSteps })
+    }
 
     const updated: Skill = {
       ...skill,
