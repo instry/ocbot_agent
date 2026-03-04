@@ -9,16 +9,22 @@ interface MessageBubbleProps {
 }
 
 const TOOL_LABELS: Record<string, string> = {
-  navigate: 'Navigating',
-  click: 'Clicking element',
-  type: 'Typing text',
-  scroll: 'Scrolling page',
-  getText: 'Reading page',
-  getElements: 'Inspecting elements',
-  waitForNavigation: 'Waiting for page load',
+  navigate: 'Opening page',
+  act: 'Performing action',
+  scroll: 'Scrolling',
+  waitForNavigation: 'Waiting for page',
+  extract: 'Extracting data',
+  observe: 'Observing page',
+  think: 'Thinking',
+  ariaTree: 'Reading page structure',
+  fillForm: 'Filling form',
 }
 
-function formatToolName(name: string): string {
+function formatToolLabel(name: string, description?: string): string {
+  if (description) {
+    const label = TOOL_LABELS[name] || name
+    return `${label}: ${description}`
+  }
   return TOOL_LABELS[name] || name
 }
 
@@ -80,6 +86,7 @@ export interface ToolBatchItem {
   id: string
   name: string
   status: 'running' | 'done'
+  description?: string
 }
 
 export interface ToolBatchProps {
@@ -103,7 +110,7 @@ export function ToolBatch({ tools, isComplete }: ToolBatchProps) {
           <Loader2 className="h-3 w-3 animate-spin text-primary" />
         )}
         <span>
-          {tools.length} actions completed
+          {completedCount} actions completed
         </span>
         <ChevronDown className={`h-3 w-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -117,7 +124,7 @@ export function ToolBatch({ tools, isComplete }: ToolBatchProps) {
               ) : (
                 <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />
               )}
-              <span>{formatToolName(tool.name)}</span>
+              <span className="truncate">{formatToolLabel(tool.name, tool.description)}</span>
             </div>
           ))}
         </div>
@@ -136,24 +143,35 @@ export function LiveToolStatus({ statuses }: LiveToolStatusProps) {
   if (statuses.length === 0) return null
 
   const completedCount = statuses.filter(t => t.status === 'done').length
-  const allDone = completedCount === statuses.length
   const currentTool = statuses.find(t => t.status === 'running')
-  const currentStep = completedCount + (currentTool ? 1 : 0)
 
   return (
-    <div className="px-3 py-1">
-      <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground">
-        {allDone ? (
-          <CheckCircle2 className="h-3 w-3 text-green-500" />
-        ) : (
-          <Loader2 className="h-3 w-3 animate-spin text-primary" />
+    <div className="flex gap-2 px-3 py-1.5">
+      <div className="mt-0.5">
+        <BotAvatar />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="space-y-0.5 border-l-2 border-primary/30 pl-3 py-1">
+          {statuses.map((ts, idx) => (
+            <div key={ts.id} className="flex items-center gap-1.5 text-xs text-muted-foreground py-0.5">
+              {ts.status === 'done' ? (
+                <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+              ) : (
+                <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />
+              )}
+              <span className="text-muted-foreground/50 w-4 text-right shrink-0">{idx + 1}.</span>
+              <span className="truncate">
+                {formatToolLabel(ts.name, ts.description)}
+                {ts.status === 'running' ? '…' : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+        {currentTool && (
+          <div className="mt-1 px-1 text-[10px] text-muted-foreground/40">
+            Step {completedCount + 1} of {statuses.length}+
+          </div>
         )}
-        <span>
-          {currentTool
-            ? `Step ${currentStep}: ${formatToolName(currentTool.name)}...`
-            : `${completedCount} actions completed`
-          }
-        </span>
       </div>
     </div>
   )

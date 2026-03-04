@@ -1,6 +1,6 @@
 import type { Variables } from './variables'
 
-export function buildSystemPrompt(pageContext?: { url: string; title: string }, variables?: Variables, initialAriaTree?: string, hasScreenshot?: boolean): string {
+export function buildSystemPrompt(pageContext?: { url: string; title: string }, variables?: Variables, initialAriaTree?: string): string {
   let prompt = `You are ocbot, an AI browser assistant that helps users complete tasks by controlling the browser.
 
 You have access to browser tools to navigate, interact with elements, and extract information from pages. Use these tools to accomplish the user's goals.
@@ -69,7 +69,7 @@ ${varList}`
 
 ## Current Page Accessibility Tree
 The ariaTree for the current page is pre-loaded below. Use nodeId values directly with act() — no need to call ariaTree first.
-${hasScreenshot ? '\nA screenshot of the page is also attached. Use it to visually verify which element matches — especially for icon-only buttons, similar elements, or complex layouts.' : ''}
+After page-changing actions, a screenshot of the resulting page will be provided. Use it to visually verify which element matches — especially for icon-only buttons, similar elements, or complex layouts.
 
 ${initialAriaTree}`
   }

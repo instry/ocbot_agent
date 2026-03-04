@@ -21,7 +21,7 @@ const MAX_TURNS = 100
 
 export interface AgentCallbacks {
   onTextDelta: (text: string) => void
-  onToolCallStart: (id: string, name: string) => void
+  onToolCallStart: (id: string, name: string, args?: string) => void
   onToolCallEnd: (id: string, name: string, result: string) => void
   onAssistantMessage: (content: string, toolCalls: ToolCallPart[]) => void
   onToolMessage: (toolCallId: string, name: string, result: string) => void
@@ -54,9 +54,8 @@ export async function runAgentLoop(
   const t0 = performance.now()
   const pageContext = await getPageContext()
 
-  // Auto-capture ariaTree and screenshot for the current page
+  // Auto-capture ariaTree for the current page so the agent can act immediately
   let initialAriaTree: string | undefined
-  let initialScreenshot: string | undefined
   if (pageContext?.url) {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
@@ -68,23 +67,13 @@ export async function runAgentLoop(
         initialAriaTree = snapshot.tree.length > maxLen
           ? snapshot.tree.slice(0, maxLen) + '\n... (truncated)'
           : snapshot.tree
-        // Capture screenshot for vision
-        try {
-          const { data } = await sendCdp<{ data: string }>(tabId, 'Page.captureScreenshot', {
-            format: 'jpeg',
-            quality: 70,
-            optimizeForSpeed: true,
-          })
-          initialScreenshot = data
-          console.log(`${TAG} 📸 Screenshot captured (${(data.length / 1024).toFixed(0)}KB base64)`)
-        } catch { /* screenshot optional */ }
       }
     } catch { /* best effort */ }
   }
 
   const systemMessage: LlmRequestMessage = {
     role: 'system',
-    content: buildSystemPrompt(pageContext, variables, initialAriaTree, !!initialScreenshot),
+    content: buildSystemPrompt(pageContext, variables, initialAriaTree),
   }
 
   // Extract the user instruction (last user message) for skill matching
@@ -194,26 +183,7 @@ export async function runAgentLoop(
   // --- Normal LLM loop ---
   console.log(`${TAG} 🤖 Entering LLM loop`)
 
-  // Inject screenshot into the last user message for vision
-  let preparedMessages = [...messages]
-  if (initialScreenshot) {
-    let lastUserIdx = -1
-    for (let i = preparedMessages.length - 1; i >= 0; i--) {
-      if (preparedMessages[i].role === 'user') { lastUserIdx = i; break }
-    }
-    if (lastUserIdx >= 0) {
-      const msg = preparedMessages[lastUserIdx]
-      const textContent = typeof msg.content === 'string' ? msg.content : ''
-      const parts: ContentPart[] = [
-        { type: 'image', mediaType: 'image/jpeg', data: initialScreenshot },
-        { type: 'text', text: textContent },
-      ]
-      preparedMessages[lastUserIdx] = { ...msg, content: parts }
-      console.log(`${TAG} 🖼️ Screenshot attached to user message`)
-    }
-  }
-
-  const allMessages: LlmRequestMessage[] = [systemMessage, ...preparedMessages]
+  const allMessages: LlmRequestMessage[] = [systemMessage, ...messages]
   const recordedSteps: AgentReplayStep[] = []
   // Global tool call counter — ensures unique IDs across all turns
   let globalToolCallIndex = 0
@@ -319,6 +289,8 @@ export async function runAgentLoop(
       let parsedArgs: unknown
       try { parsedArgs = JSON.parse(tc.arguments || '{}') } catch { parsedArgs = tc.arguments }
       console.log(`${TAG}   ┌ ${tc.name}`, parsedArgs)
+      // Update tool status with args now that streaming is complete
+      callbacks.onToolCallStart(tc.id, tc.name, tc.arguments)
       const toolT0 = performance.now()
       const result = await executeTool(tc.name, tc.arguments, provider, cache!, signal, variables)
       const toolMs = (performance.now() - toolT0).toFixed(0)
@@ -344,6 +316,32 @@ export async function runAgentLoop(
         if (step) recordedSteps.push(step)
       } catch { /* skip recording on parse error */ }
     }
+
+    // Capture fresh screenshot after page-changing actions for next turn
+    const PAGE_CHANGING_TOOLS = new Set(['navigate', 'act', 'scroll', 'waitForNavigation', 'fillForm'])
+    const hasPageChange = toolCallArray.some(tc => PAGE_CHANGING_TOOLS.has(tc.name))
+    if (hasPageChange) {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        if (tab?.id) {
+          await ensureAttached(tab.id)
+          const { data } = await sendCdp<{ data: string }>(tab.id, 'Page.captureScreenshot', {
+            format: 'jpeg',
+            quality: 70,
+            optimizeForSpeed: true,
+          })
+          allMessages.push({
+            role: 'user',
+            content: [
+              { type: 'image', mediaType: 'image/jpeg', data },
+              { type: 'text', text: 'Here is the current page screenshot after the actions above.' },
+            ],
+          })
+          console.log(`${TAG} 📸 Fresh screenshot captured (${(data.length / 1024).toFixed(0)}KB)`)
+        }
+      } catch { /* screenshot optional */ }
+    }
+
     console.groupEnd() // turn
   }
 

@@ -14,6 +14,23 @@ interface ChatAreaProps {
   error: string | null
 }
 
+function parseToolDescription(name: string, argsStr?: string): string | undefined {
+  if (!argsStr) return undefined
+  try {
+    const args = JSON.parse(argsStr)
+    if (name === 'act') return args.instruction || (args.method ? `${args.method} element` : undefined)
+    if (name === 'navigate') {
+      const url = args.url || ''
+      return url.length > 50 ? url.slice(0, 50) + '…' : url
+    }
+    if (name === 'extract' || name === 'observe') return args.instruction
+    if (name === 'scroll') return args.direction || 'down'
+    if (name === 'think') return args.thought?.slice(0, 60)
+    if (name === 'fillForm') return (args.fields || []).map((f: { field: string }) => f.field).join(', ')
+  } catch { /* ignore */ }
+  return undefined
+}
+
 export function ChatArea({ hasProvider, messages, streamingText, isLoading, toolStatuses, error }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -25,7 +42,7 @@ export function ChatArea({ hasProvider, messages, streamingText, isLoading, tool
   // This prevents showing "1/1" for each turn — instead shows "n/n" consolidated.
   type RenderItem =
     | { type: 'message'; msg: ChatMessage }
-    | { type: 'toolGroup'; id: string; tools: { id: string; name: string; status: 'done' }[] }
+    | { type: 'toolGroup'; id: string; tools: { id: string; name: string; status: 'done'; description?: string }[] }
 
   const renderItems = useMemo(() => {
     const items: RenderItem[] = []
@@ -34,13 +51,19 @@ export function ChatArea({ hasProvider, messages, streamingText, isLoading, tool
       if (msg.role === 'assistant' && msg.toolCalls?.length && !msg.content) {
         // Tool-only assistant message — merge into previous group or start new one
         const last = items[items.length - 1]
+        const newTools = msg.toolCalls.map(tc => ({
+          id: tc.id,
+          name: tc.name,
+          status: 'done' as const,
+          description: parseToolDescription(tc.name, tc.arguments),
+        }))
         if (last?.type === 'toolGroup') {
-          last.tools.push(...msg.toolCalls.map(tc => ({ id: tc.id, name: tc.name, status: 'done' as const })))
+          last.tools.push(...newTools)
         } else {
           items.push({
             type: 'toolGroup',
             id: msg.id,
-            tools: msg.toolCalls.map(tc => ({ id: tc.id, name: tc.name, status: 'done' as const })),
+            tools: newTools,
           })
         }
       } else {

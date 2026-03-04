@@ -12,6 +12,7 @@ export interface ToolStatus {
   id: string
   name: string
   status: 'running' | 'done'
+  description?: string
   result?: string
 }
 
@@ -159,12 +160,49 @@ export function useChat(provider: LlmProvider | null) {
             currentText += text
             setStreamingText(currentText)
           },
-          onToolCallStart: (id, name) => {
-            setToolStatuses(prev => [...prev, { id, name, status: 'running' }])
+          onToolCallStart: (id, name, args) => {
+            let description: string | undefined
+            if (args) {
+              try {
+                const parsed = JSON.parse(args)
+                if (name === 'act') {
+                  description = parsed.instruction || (parsed.method ? `${parsed.method} element` : undefined)
+                } else if (name === 'navigate') {
+                  const url = parsed.url || ''
+                  description = url.length > 50 ? url.slice(0, 50) + '…' : url
+                } else if (name === 'extract' || name === 'observe') {
+                  description = parsed.instruction
+                } else if (name === 'scroll') {
+                  description = parsed.direction || 'down'
+                } else if (name === 'think') {
+                  description = parsed.thought?.slice(0, 60)
+                } else if (name === 'fillForm') {
+                  description = (parsed.fields || []).map((f: { field: string }) => f.field).join(', ')
+                }
+              } catch { /* ignore */ }
+            }
+            setToolStatuses(prev => {
+              // Update existing (from streaming start) or add new
+              const exists = prev.find(ts => ts.id === id)
+              if (exists) {
+                return prev.map(ts => ts.id === id ? { ...ts, description } : ts)
+              }
+              return [...prev, { id, name, status: 'running', description }]
+            })
           },
           onToolCallEnd: (id, name, result) => {
+            let description: string | undefined
+            try {
+              const parsed = JSON.parse(result)
+              description = parsed.description
+            } catch { /* ignore */ }
             setToolStatuses(prev =>
-              prev.map(ts => ts.id === id ? { ...ts, status: 'done' as const, result } : ts)
+              prev.map(ts => ts.id === id ? {
+                ...ts,
+                status: 'done' as const,
+                result,
+                description: description || ts.description,
+              } : ts)
             )
           },
           onAssistantMessage: (content, toolCalls) => {

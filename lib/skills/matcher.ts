@@ -154,20 +154,31 @@ export async function matchSkill(
  * Match a user instruction against auto-skills (exact match on normalized instruction + configSignature).
  * Touches updatedAt on hit to keep LRU fresh.
  */
+function safeHostname(url: string): string {
+  try { return new URL(url).hostname.toLowerCase() }
+  catch { return '' }
+}
+
 export async function matchAutoSkill(
   instruction: string,
   configSignature: string,
+  currentUrl: string,
   store: SkillStore,
 ): Promise<Skill | null> {
   const allSkills = await store.list()
   const normalized = instruction.trim().toLowerCase()
+  const hostname = safeHostname(currentUrl)
 
   const match = allSkills.find(
     (s) =>
       s.source === 'auto' &&
       s.status === 'active' &&
       s.instruction === normalized &&
-      s.configSignature === configSignature,
+      s.configSignature === configSignature &&
+      // Skip hostname check if the skill starts with a navigate step
+      // (the skill will navigate to the right page regardless of starting URL)
+      (s.steps[0]?.type === 'navigate' ||
+        (hostname !== '' && safeHostname(s.startUrl) === hostname)),
   )
 
   if (!match) return null
