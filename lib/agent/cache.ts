@@ -16,6 +16,8 @@ export interface ActionStep {
   alternativeSelectors?: AlternativeSelector[]
   className?: string
   testId?: string
+  /** Cached page-absolute click coordinates (recorded after successful execution) */
+  clickPoint?: { x: number; y: number }
 }
 
 export interface CachedAction {

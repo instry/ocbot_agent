@@ -116,7 +116,7 @@ export async function findByXPath(
 }
 
 /**
- * Enrich actions with XPath and DOM attributes for stable cross-session selectors.
+ * Enrich actions with XPath, DOM attributes, and click coordinates for stable cross-session selectors.
  */
 async function enrichWithXPath(
   tabId: number,
@@ -138,9 +138,67 @@ async function enrichWithXPath(
       }
     }
 
-    enriched.push({ ...action, xpath: xpath ?? undefined, className, testId })
+    // Record click coordinates for click actions
+    let clickPoint = action.clickPoint
+    if (action.method === 'click') {
+      try {
+        const objectId = await resolveNode(tabId, action.backendNodeId)
+        await scrollIntoView(tabId, objectId)
+        const pt = await getClickPoint(tabId, action.backendNodeId)
+        // Convert viewport coords to page-absolute coords
+        const scrollResult = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => ({ scrollX: window.scrollX, scrollY: window.scrollY }),
+        })
+        const scroll = scrollResult[0]?.result ?? { scrollX: 0, scrollY: 0 }
+        clickPoint = { x: pt.x + scroll.scrollX, y: pt.y + scroll.scrollY }
+        await sendCdp(tabId, 'Runtime.releaseObject', { objectId })
+      } catch { /* best effort */ }
+    }
+
+    enriched.push({ ...action, xpath: xpath ?? undefined, className, testId, clickPoint })
   }
   return enriched
+}
+
+/**
+ * Click at absolute page coordinates without needing a DOM node reference.
+ * Scrolls the point into viewport first, then dispatches mouse events.
+ */
+async function cdpClickAtPoint(tabId: number, x: number, y: number): Promise<void> {
+  // Scroll so the point is in viewport
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (px: number, py: number) => {
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      const sx = Math.max(0, px - vw / 2)
+      const sy = Math.max(0, py - vh / 2)
+      window.scrollTo(sx, sy)
+    },
+    args: [x, y],
+  })
+  // Small delay for scroll to settle
+  await new Promise((r) => setTimeout(r, 100))
+
+  // Get current scroll offset to convert page coords to viewport coords
+  const scrollResult = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => ({ scrollX: window.scrollX, scrollY: window.scrollY }),
+  })
+  const scroll = scrollResult[0]?.result ?? { scrollX: 0, scrollY: 0 }
+  const vx = x - scroll.scrollX
+  const vy = y - scroll.scrollY
+
+  await sendCdp(tabId, 'Input.dispatchMouseEvent', {
+    type: 'mouseMoved', x: vx, y: vy,
+  })
+  await sendCdp(tabId, 'Input.dispatchMouseEvent', {
+    type: 'mousePressed', x: vx, y: vy, button: 'left', clickCount: 1,
+  })
+  await sendCdp(tabId, 'Input.dispatchMouseEvent', {
+    type: 'mouseReleased', x: vx, y: vy, button: 'left', clickCount: 1,
+  })
 }
 
 async function scrollIntoView(tabId: number, objectId: string): Promise<void> {
@@ -255,6 +313,11 @@ async function executeAction(
   try {
     switch (action.method) {
       case 'click':
+        // Coordinate-based click when backendNodeId is sentinel -1
+        if (action.backendNodeId === -1 && action.clickPoint) {
+          await cdpClickAtPoint(tabId, action.clickPoint.x, action.clickPoint.y)
+          return { success: true }
+        }
         await cdpClick(tabId, action.backendNodeId)
         return { success: true }
       case 'type':
@@ -319,8 +382,9 @@ async function replayActions(
  * Try to self-heal cached actions by:
  * 1. XPath lookup (stable across page loads)
  * 2. testId matching (most stable DOM selector)
- * 3. Fuzzy roleName matching in current AXTree
- * 4. Alternative selectors (historically successful selectors)
+ * 3. Cached click coordinates (bypasses DOM entirely, click-only)
+ * 4. Fuzzy roleName matching in current AXTree
+ * 5. Alternative selectors (historically successful selectors)
  * Returns updated actions with new backendNodeIds, or null if matching fails.
  */
 async function selfHealFromSnapshot(
@@ -351,6 +415,14 @@ async function selfHealFromSnapshot(
         healed.push({ ...action, backendNodeId: match.backendNodeId })
         continue
       }
+    }
+
+    // Try cached click coordinates (click-only, bypasses DOM)
+    if (action.method === 'click' && action.clickPoint) {
+      logDebug('selector', 'clickPoint match', { x: action.clickPoint.x, y: action.clickPoint.y })
+      // Use a sentinel backendNodeId=-1 to signal coordinate-based click
+      healed.push({ ...action, backendNodeId: -1 })
+      continue
     }
 
     // Fallback to roleName fuzzy match

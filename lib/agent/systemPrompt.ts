@@ -20,6 +20,7 @@ You have access to browser tools to navigate, interact with elements, and extrac
 - Use nodeId-based act calls — they execute instantly without extra inference
 - You can batch multiple act calls in a single response if they don't depend on each other's results
 - Only use instruction-based act as a fallback when you don't have the ariaTree
+- **Vision fallback**: If you cannot find the expected element in ariaTree (e.g. icon-only buttons, elements in iframes, dynamically rendered content), call screenshot to visually locate it, then use instruction-based act to interact with it
 
 ## Tool Usage
 - act: Perform a page interaction. Two modes:

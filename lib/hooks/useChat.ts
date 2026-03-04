@@ -238,7 +238,27 @@ export function useChat(provider: LlmProvider | null) {
           onError: (error) => {
             setError(error)
           },
-          onRecordedSteps: (steps, instruction, startUrl) => {
+          onRecordedSteps: async (steps, instruction, startUrl) => {
+            // Don't prompt if a user skill already covers this site
+            try {
+              const store = new SkillStore()
+              const existing = await store.list()
+              const instrLower = instruction.toLowerCase()
+              const hasMatchingSkill = existing.some(s => {
+                if (s.source !== 'user') return false
+                // Check hostname match
+                try {
+                  if (startUrl && s.startUrl &&
+                    new URL(s.startUrl).hostname === new URL(startUrl).hostname) {
+                    // Check if skill name words overlap with instruction
+                    const nameWords = s.name.toLowerCase().split(/[\s\-_]+/).filter(w => w.length >= 2)
+                    return nameWords.some(w => instrLower.includes(w))
+                  }
+                } catch { /* ignore URL parse errors */ }
+                return false
+              })
+              if (hasMatchingSkill) return
+            } catch { /* proceed to show prompt on error */ }
             setPendingSkillSave({ steps, instruction, startUrl })
           },
         },

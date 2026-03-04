@@ -5,7 +5,7 @@ import { streamChat } from '../llm/client'
 import { BROWSER_TOOLS, executeTool } from './tools'
 import { buildSystemPrompt } from './systemPrompt'
 import { capturePageSnapshot } from './snapshot'
-import { ensureAttached } from './cdp'
+import { ensureAttached, sendCdp } from './cdp'
 import {
   type AgentReplayStep,
   toolCallToReplayStep,
@@ -302,6 +302,41 @@ export async function runAgentLoop(
       }
       callbacks.onToolCallEnd(tc.id, tc.name, result)
       callbacks.onToolMessage(tc.id, tc.name, result)
+
+      // Auto-screenshot after navigate — so LLM sees the new page visually
+      if (tc.name === 'navigate') {
+        try {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+          if (tab?.id) {
+            await ensureAttached(tab.id)
+            const { data } = await sendCdp<{ data: string }>(tab.id, 'Page.captureScreenshot', {
+              format: 'jpeg',
+              quality: 70,
+              optimizeForSpeed: true,
+            })
+            allMessages.push({
+              role: 'tool',
+              content: result,
+              toolCallId: tc.id,
+            })
+            allMessages.push({
+              role: 'user',
+              content: [
+                { type: 'image', mediaType: 'image/jpeg', data },
+                { type: 'text', text: 'Page loaded. Here is a screenshot of the current page.' },
+              ],
+            })
+            console.log(`${TAG} 📸 Auto-screenshot after navigate (${Math.round(data.length / 1024)}KB)`)
+            // Record step
+            try {
+              const args = JSON.parse(tc.arguments || '{}')
+              const step = toolCallToReplayStep(tc.name, args, result)
+              if (step) recordedSteps.push(step)
+            } catch { /* skip */ }
+            continue // skip the default tool message push below
+          }
+        } catch { /* fallback — just push text result */ }
+      }
 
       // Screenshot tool returns image data — inject as multimodal user message
       if (tc.name === 'screenshot') {
