@@ -126,11 +126,17 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     apiKeyUrl: 'https://bailian.console.aliyun.com/?apiKey=1',
     apiKeyPlaceholder: 'sk-...',
-    defaultModelId: 'qwen-max',
+    defaultModelId: 'qwen3-max',
     models: [
-      { id: 'qwen-max', name: 'Qwen Max (Latest)', contextWindow: 32000 },
-      { id: 'qwen-plus', name: 'Qwen Plus', contextWindow: 131072 },
-      { id: 'qwen3-coder', name: 'Qwen3 Coder', contextWindow: 131072 },
+      { id: 'qwen3-max', name: 'Qwen3 Max', contextWindow: 262144 },
+      { id: 'qwen3.5-plus', name: 'Qwen3.5 Plus', contextWindow: 1000000 },
+      { id: 'qwen3.5-flash', name: 'Qwen3.5 Flash', contextWindow: 1000000 },
+      { id: 'qwen3-coder-plus', name: 'Qwen3 Coder Plus', contextWindow: 1000000 },
+      { id: 'qwen3-coder-flash', name: 'Qwen3 Coder Flash', contextWindow: 1000000 },
+    ],
+    regions: [
+      { id: 'cn', label: 'China', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', apiKeyUrl: 'https://bailian.console.aliyun.com/?apiKey=1' },
+      { id: 'global', label: 'Global (Singapore)', baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', apiKeyUrl: 'https://bailian.console.aliyun.com/?apiKey=1' },
     ],
   },
   {

@@ -91,15 +91,15 @@ function TelegramTab({
     setEditingChannel(null)
 
     if (config.enabled && config.botToken) {
-      await chrome.runtime.sendMessage({ type: 'startChannel', config })
+      await chrome.runtime.sendMessage({ type: 'startChannel', config, timestamp: Date.now() })
     } else {
-      await chrome.runtime.sendMessage({ type: 'stopChannel', channelId: config.id })
+      await chrome.runtime.sendMessage({ type: 'stopChannel', channelId: config.id, timestamp: Date.now() })
     }
     onRefreshStatuses()
   }
 
   const handleDelete = async (id: string) => {
-    await chrome.runtime.sendMessage({ type: 'stopChannel', channelId: id })
+    await chrome.runtime.sendMessage({ type: 'stopChannel', channelId: id, timestamp: Date.now() })
     await deleteChannelConfig(id)
     setConfigs(await getChannelConfigs())
     onRefreshStatuses()

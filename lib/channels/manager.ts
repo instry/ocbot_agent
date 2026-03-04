@@ -83,5 +83,6 @@ function broadcastStatus(channelId: string, status: ChannelStatus, error?: strin
     channelId,
     status,
     error,
+    timestamp: Date.now(),
   }).catch(() => {}) // Ignore errors when no listeners
 }

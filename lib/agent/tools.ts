@@ -1,7 +1,7 @@
 import type { ToolDefinition, LlmProvider } from '../llm/types'
 import type { ActCache } from './cache'
 import type { Variables } from './variables'
-import { act } from './act'
+import { act, actDirect, type ActOptions } from './act'
 import { extract } from './extract'
 import { observe } from './observe'
 import { fillForm } from './fillForm'
@@ -12,13 +12,16 @@ import { substituteVariables } from './variables'
 export const BROWSER_TOOLS: ToolDefinition[] = [
   {
     name: 'act',
-    description: 'Perform a browser action described in natural language. The system will automatically find the right element and interact with it. Examples: "click the Sign In button", "type hello@email.com in the email field", "select English from the language dropdown".',
+    description: 'Perform a browser action. If you have the nodeId from ariaTree, provide it with method for fast direct execution (no extra LLM call). Otherwise provide instruction for natural language execution.',
     parameters: {
       type: 'object',
       properties: {
-        instruction: { type: 'string', description: 'Natural language description of the action to perform' },
+        instruction: { type: 'string', description: 'Natural language description of the action (used when nodeId is not provided)' },
+        nodeId: { type: 'number', description: 'Element nodeId from ariaTree for direct execution' },
+        method: { type: 'string', description: 'Action method', enum: ['click', 'type', 'select', 'press'] },
+        value: { type: 'string', description: 'Value for type/select/press actions' },
       },
-      required: ['instruction'],
+      required: [],
     },
   },
   {
@@ -201,21 +204,35 @@ export async function executeTool(
   cache: ActCache,
   signal?: AbortSignal,
   variables?: Variables,
+  options?: ActOptions,
 ): Promise<string> {
   try {
     const args = JSON.parse(argsJson || '{}')
     switch (name) {
       case 'act': {
+        if (args.nodeId != null && args.method) {
+          // Direct execution — no LLM inference needed
+          const result = await actDirect(args.nodeId, args.method, args.value, cache, signal)
+          return JSON.stringify({
+            success: result.success,
+            description: result.description,
+            actions: result.actions.map(a => a.description),
+            status: '(direct)',
+          })
+        }
+        // Fallback: natural language instruction (existing behavior)
         const instruction = variables
           ? substituteVariables(args.instruction, variables)
           : args.instruction
-        const result = await act(instruction, provider, cache, signal)
+        const result = await act(instruction, provider, cache, signal, options)
         const status = result.cacheHit ? '(cache hit)' : result.selfHealed ? '(self-healed)' : '(new)'
         return JSON.stringify({
           success: result.success,
           description: result.description,
           actions: result.actions.map(a => a.description),
           status,
+          selfHealed: result.selfHealed,
+          noEffect: result.noEffect,
         })
       }
       case 'extract': {

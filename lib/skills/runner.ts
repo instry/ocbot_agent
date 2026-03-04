@@ -138,7 +138,7 @@ export class SkillRunner {
     const { executeTool } = await import('@/lib/agent/tools')
 
     const executeForReplay = (name: string, argsJson: string) =>
-      executeTool(name, argsJson, provider, cache, signal, variables)
+      executeTool(name, argsJson, provider, cache, signal, variables, { skillReplay: true })
 
     const replayCallbacks: ReplayCallbacks = {
       onStepStart: (i, step) => callbacks.onStepStart(i, step),
@@ -149,6 +149,32 @@ export class SkillRunner {
     // L2 heal function: re-infer a single failed step via LLM
     const healFn = async (failedStep: AgentReplayStep, _stepIndex: number) => {
       return healStep(failedStep, provider)
+    }
+
+    // Fragile step precheck: verify known-fragile act steps before replay
+    if (skill.fragileSteps?.length) {
+      const { findByXPath } = await import('@/lib/agent/act')
+      const { ensureAttached } = await import('@/lib/agent/cdp')
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      if (tab?.id) {
+        await ensureAttached(tab.id)
+        for (const idx of skill.fragileSteps) {
+          const step = steps[idx]
+          if (step?.type !== 'act' || !step.actions?.length) continue
+          const allResolvable = (await Promise.all(
+            step.actions.map(async (a) => {
+              if (!a.xpath) return false
+              const nodeId = await findByXPath(tab.id!, a.xpath)
+              return nodeId !== null
+            }),
+          )).every(Boolean)
+          if (!allResolvable) {
+            logDebug('fragile-precheck', 'Pre-checking fragile step', { stepIndex: idx })
+            const healed = await healFn(step, idx)
+            if (healed) steps[idx] = healed
+          }
+        }
+      }
     }
 
     const replayResult = await replayAgentSteps(steps, executeForReplay, replayCallbacks, signal, healFn)

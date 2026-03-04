@@ -2,7 +2,6 @@
 export {}
 declare global {
   const BotAvatar: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/BotAvatar').BotAvatar
-  const ChannelSettings: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/ChannelSettings').ChannelSettings
   const ChatArea: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/ChatArea').ChatArea
   const ChatInput: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/ChatInput').ChatInput
   const ChatList: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/ChatList').ChatList
@@ -11,7 +10,10 @@ declare global {
   const LiveToolStatus: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/MessageBubble').LiveToolStatus
   const MatchPattern: typeof import('wxt/utils/match-patterns').MatchPattern
   const MessageBubble: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/MessageBubble').MessageBubble
+  const ProviderForm: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/ProviderForm').ProviderForm
+  const RemoteChannels: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/RemoteChannels').RemoteChannels
   const Settings: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/Settings').Settings
+  const SuggestionChips: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/SuggestionChips').SuggestionChips
   const ToolBatch: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/MessageBubble').ToolBatch
   const WelcomeHero: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/WelcomeHero').WelcomeHero
   const browser: typeof import('wxt/browser').browser
