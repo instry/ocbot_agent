@@ -1,6 +1,212 @@
-import { useState, useEffect } from 'react'
-import { ArrowLeft, Star, GitFork, BadgeCheck, Play, Download, ImageOff, Trash2, Pencil } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { ArrowLeft, Star, GitFork, BadgeCheck, Play, Copy, ImageOff, Trash2, Pencil } from 'lucide-react'
 import { getSkillDetail, getLocalSkillDetail, getSkillAbbr, type Skill, type SkillDetail } from '../data/skills'
+
+// ---------------------------------------------------------------------------
+// Lightweight Markdown renderer — handles headings, lists, bold, code, hr
+// ---------------------------------------------------------------------------
+
+interface MdNode {
+  type: 'heading' | 'p' | 'ul' | 'ol' | 'hr' | 'code_block'
+  level?: number   // 1-6 for headings
+  content?: string
+  items?: string[]
+  lang?: string
+}
+
+/** Normalise literal \n sequences that some LLMs produce inside JSON strings. */
+function normaliseMd(text: string): string {
+  // If the text contains literal \n but no real newlines, unescape them
+  if (!text.includes('\n') && text.includes('\\n')) {
+    return text.replace(/\\n/g, '\n')
+  }
+  return text
+}
+
+function isHeading(line: string): { level: number; text: string } | null {
+  const m = line.match(/^(#{1,6})\s+(.*)$/)
+  if (m) return { level: m[1].length, text: m[2] }
+  return null
+}
+
+function isUnorderedListItem(line: string): string | null {
+  const m = line.match(/^\s*[-*+]\s+(.*)$/)
+  return m ? m[1] : null
+}
+
+function isOrderedListItem(line: string): string | null {
+  const m = line.match(/^\s*\d+[.)]\s+(.*)$/)
+  return m ? m[1] : null
+}
+
+function parseMd(raw: string): MdNode[] {
+  const text = normaliseMd(raw)
+  const lines = text.split('\n')
+  const nodes: MdNode[] = []
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+
+    // Fenced code block
+    if (line.trimStart().startsWith('```')) {
+      const lang = line.trimStart().slice(3).trim()
+      const codeLines: string[] = []
+      i++
+      while (i < lines.length && !lines[i].trimStart().startsWith('```')) {
+        codeLines.push(lines[i])
+        i++
+      }
+      nodes.push({ type: 'code_block', content: codeLines.join('\n'), lang })
+      if (i < lines.length) i++ // skip closing ```
+      continue
+    }
+
+    // Blank line
+    if (line.trim() === '') { i++; continue }
+
+    // Horizontal rule
+    if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line.trim())) {
+      nodes.push({ type: 'hr' })
+      i++
+      continue
+    }
+
+    // Headings
+    const heading = isHeading(line)
+    if (heading) {
+      nodes.push({ type: 'heading', level: heading.level, content: heading.text })
+      i++
+      continue
+    }
+
+    // Unordered list
+    if (isUnorderedListItem(line) !== null) {
+      const items: string[] = []
+      while (i < lines.length) {
+        const item = isUnorderedListItem(lines[i])
+        if (item === null) break
+        items.push(item)
+        i++
+      }
+      nodes.push({ type: 'ul', items })
+      continue
+    }
+
+    // Ordered list
+    if (isOrderedListItem(line) !== null) {
+      const items: string[] = []
+      while (i < lines.length) {
+        const item = isOrderedListItem(lines[i])
+        if (item === null) break
+        items.push(item)
+        i++
+      }
+      nodes.push({ type: 'ol', items })
+      continue
+    }
+
+    // Paragraph — collect consecutive lines that don't match any block pattern
+    const paraLines: string[] = []
+    while (i < lines.length && lines[i].trim() !== '') {
+      // Stop if next line starts a new block
+      const next = lines[i]
+      if (
+        isHeading(next) ||
+        isUnorderedListItem(next) !== null ||
+        isOrderedListItem(next) !== null ||
+        next.trimStart().startsWith('```') ||
+        /^(-{3,}|\*{3,}|_{3,})\s*$/.test(next.trim())
+      ) break
+      paraLines.push(next)
+      i++
+    }
+    if (paraLines.length > 0) {
+      nodes.push({ type: 'p', content: paraLines.join('\n') })
+    } else {
+      // Safety: if nothing matched, consume the line as a paragraph to avoid infinite loop
+      nodes.push({ type: 'p', content: line })
+      i++
+    }
+  }
+
+  return nodes
+}
+
+/** Render inline markdown: **bold**, `code`, *italic* */
+function InlineText({ text }: { text: string }) {
+  const parts = text.split(/(\*\*.*?\*\*|`.*?`|\*[^*]+?\*)/g)
+  return (
+    <>
+      {parts.map((part, j) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={j} className="font-semibold text-foreground">{part.slice(2, -2)}</strong>
+        }
+        if (part.startsWith('`') && part.endsWith('`')) {
+          return <code key={j} className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">{part.slice(1, -1)}</code>
+        }
+        if (part.startsWith('*') && part.endsWith('*') && !part.startsWith('**')) {
+          return <em key={j} className="italic">{part.slice(1, -1)}</em>
+        }
+        return <span key={j}>{part}</span>
+      })}
+    </>
+  )
+}
+
+function RenderedMarkdown({ text }: { text: string }) {
+  const nodes = useMemo(() => parseMd(text || ''), [text])
+
+  return (
+    <div className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+      {nodes.map((node, i) => {
+        switch (node.type) {
+          case 'heading': {
+            const cls = node.level === 1
+              ? 'text-base font-semibold text-foreground'
+              : node.level === 2
+                ? 'text-sm font-semibold text-foreground'
+                : 'text-sm font-medium text-foreground'
+            const Tag = (node.level! <= 2 ? 'h3' : 'h4') as 'h3' | 'h4'
+            return <Tag key={i} className={cls}><InlineText text={node.content!} /></Tag>
+          }
+          case 'hr':
+            return <hr key={i} className="border-border/40" />
+          case 'code_block':
+            return (
+              <pre key={i} className="overflow-x-auto rounded-lg bg-muted/80 px-4 py-3 font-mono text-xs text-foreground">
+                {node.content}
+              </pre>
+            )
+          case 'ul':
+            return (
+              <ul key={i} className="list-disc space-y-1 pl-5">
+                {node.items!.map((item, j) => (
+                  <li key={j}><InlineText text={item} /></li>
+                ))}
+              </ul>
+            )
+          case 'ol':
+            return (
+              <ol key={i} className="list-decimal space-y-1 pl-5">
+                {node.items!.map((item, j) => (
+                  <li key={j}><InlineText text={item} /></li>
+                ))}
+              </ol>
+            )
+          case 'p':
+            return (
+              <p key={i} className="whitespace-pre-line">
+                <InlineText text={node.content!} />
+              </p>
+            )
+          default:
+            return null
+        }
+      })}
+    </div>
+  )
+}
 
 function DetailIcon({ detail, className = 'h-16 w-16' }: { detail: SkillDetail; className?: string }) {
   if (detail.iconUrl) {
@@ -88,7 +294,7 @@ export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplac
           {/* Action buttons */}
           <div className="flex items-center gap-3">
             <button className="flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-              <Download className="h-4 w-4" />
+              <Copy className="h-4 w-4" />
               Clone
             </button>
             <button
@@ -148,26 +354,7 @@ export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplac
         {/* About */}
         <section>
           <h2 className="mb-3 text-lg font-semibold text-foreground">About</h2>
-          <div className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-            {detail.longDescription.split('\n').map((line, i) => {
-              // Render **bold** text
-              const parts = line.split(/(\*\*.*?\*\*|`.*?`)/g)
-              return (
-                <span key={i}>
-                  {parts.map((part, j) => {
-                    if (part.startsWith('**') && part.endsWith('**')) {
-                      return <strong key={j} className="font-semibold text-foreground">{part.slice(2, -2)}</strong>
-                    }
-                    if (part.startsWith('`') && part.endsWith('`')) {
-                      return <code key={j} className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">{part.slice(1, -1)}</code>
-                    }
-                    return part
-                  })}
-                  {i < detail.longDescription.split('\n').length - 1 && '\n'}
-                </span>
-              )
-            })}
-          </div>
+          <RenderedMarkdown text={detail.longDescription} />
         </section>
 
         {/* Parameters */}

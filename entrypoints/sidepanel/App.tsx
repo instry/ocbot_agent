@@ -9,7 +9,6 @@ import { Header } from './components/Header'
 import { useLlmProvider } from '@/lib/llm/useLlmProvider'
 import { useChat } from '@/lib/hooks/useChat'
 import type { ChannelStatus } from '@/lib/channels/types'
-import { SkillStore } from '@/lib/skills/store'
 
 type View = 'chat' | 'chatList'
 
@@ -18,7 +17,7 @@ export function App() {
   const { providers, selectedProvider, saveProvider, deleteProvider, selectProvider } = useLlmProvider()
   const {
     messages, conversationId, conversations, streamingText, isLoading,
-    toolStatuses, error, sendMessage, stopAgent, newChat,
+    toolStatuses, error, sendMessage, runSkill, stopAgent, newChat,
     loadConversation, removeConversation,
     pendingSkillSave, saveAsSkill, dismissSkillSave,
   } = useChat(selectedProvider)
@@ -29,14 +28,34 @@ export function App() {
   const pendingMessageRef = useRef<string | null>(null)
   const chatInputRef = useRef<ChatInputHandle>(null)
 
+  // Auto-dismiss "Save as Skill?" prompt after 8s
+  useEffect(() => {
+    if (!pendingSkillSave || skillSaved) return
+    const timer = setTimeout(() => dismissSkillSave(), 5000)
+    return () => clearTimeout(timer)
+  }, [pendingSkillSave, skillSaved, dismissSkillSave])
+
+  // Auto-dismiss "Saved successfully" prompt after 5s
+  useEffect(() => {
+    if (!skillSaved) return
+    const timer = setTimeout(() => setSkillSaved(false), 3000)
+    return () => clearTimeout(timer)
+  }, [skillSaved])
+
   // Process pending message once provider is ready
   useEffect(() => {
     if (pendingMessageRef.current && selectedProvider && !isLoading) {
       const text = pendingMessageRef.current
       pendingMessageRef.current = null
-      sendMessage(text)
+      // Skill run uses dedicated path (bypasses LLM agent loop)
+      if (text.startsWith('__run_skill__:')) {
+        const skillId = text.slice('__run_skill__:'.length)
+        runSkill(skillId)
+      } else {
+        sendMessage(text)
+      }
     }
-  }, [selectedProvider, isLoading, sendMessage])
+  }, [selectedProvider, isLoading, sendMessage, runSkill])
 
   // Pick up pending message from home page (on mount)
   useEffect(() => {
@@ -44,12 +63,8 @@ export function App() {
       const skillId = result.ocbot_run_skill
       if (skillId && typeof skillId === 'string') {
         chrome.storage.local.remove('ocbot_run_skill')
-        const store = new SkillStore()
-        const skill = await store.get(skillId)
-        if (skill) {
-          newChat()
-          pendingMessageRef.current = `Run skill: ${skill.name}`
-        }
+        newChat()
+        pendingMessageRef.current = `__run_skill__:${skillId}`
         return
       }
       const text = result.ocbot_pending_message
@@ -74,13 +89,8 @@ export function App() {
       if (changes.ocbot_run_skill?.newValue) {
         const skillId = changes.ocbot_run_skill.newValue
         chrome.storage.local.remove('ocbot_run_skill')
-        const store = new SkillStore()
-        store.get(skillId).then(skill => {
-          if (skill) {
-            newChat()
-            pendingMessageRef.current = `Run skill: ${skill.name}`
-          }
-        })
+        newChat()
+        pendingMessageRef.current = `__run_skill__:${skillId}`
       }
       if (changes.ocbot_pending_message?.newValue) {
         const text = changes.ocbot_pending_message.newValue
@@ -100,7 +110,7 @@ export function App() {
   }, [newChat, loadConversation])
 
   const refreshChannelStatuses = useCallback(() => {
-    chrome.runtime.sendMessage({ type: 'getChannelStatuses' }, (resp) => {
+    chrome.runtime.sendMessage({ type: 'getChannelStatuses', timestamp: Date.now() }, (resp) => {
       if (resp?.ok) {
         setChannelStatuses(resp.statuses)
       }
@@ -170,9 +180,9 @@ export function App() {
               </button>
               <button
                 onClick={() => dismissSkillSave()}
-                className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                className="rounded-lg p-1 text-muted-foreground hover:text-foreground"
               >
-                Dismiss
+                <X className="h-3.5 w-3.5" />
               </button>
             </div>
           )}

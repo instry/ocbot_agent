@@ -6,6 +6,7 @@ import { runAgentLoop } from '@/lib/agent/loop'
 import { ActCache } from '@/lib/agent/cache'
 import { createSkillFromExecution } from '@/lib/skills/create'
 import { SkillStore } from '@/lib/skills/store'
+import { SkillRunner } from '@/lib/skills/runner'
 import { saveConversation, getConversations, deleteConversation } from '@/lib/storage'
 
 export interface ToolStatus {
@@ -255,6 +256,87 @@ export function useChat(provider: LlmProvider | null) {
     }
   }, [provider, messages, isLoading])
 
+  const runSkill = useCallback(async (skillId: string) => {
+    if (!provider || isLoading) return
+
+    const store = new SkillStore()
+    const skill = await store.get(skillId)
+    if (!skill) {
+      setError(`Skill not found: ${skillId}`)
+      return
+    }
+
+    setError(null)
+    setIsLoading(true)
+    setStreamingText('')
+    setToolStatuses([])
+
+    // Show a user-like message so it's clear what happened
+    const userMsg: ChatMessage = {
+      id: `msg_${Date.now()}`,
+      role: 'user',
+      content: `Run skill: ${skill.name}`,
+      createdAt: Date.now(),
+    }
+    setMessages(prev => [...prev, userMsg])
+
+    const abortController = new AbortController()
+    abortRef.current = abortController
+    let currentText = ''
+
+    try {
+      const runner = new SkillRunner(store)
+      const result = await runner.execute(
+        skill,
+        {},
+        provider,
+        actCache,
+        {
+          onStepStart: (i, step) => {
+            const id = `skill-step-${i}`
+            setToolStatuses(prev => [...prev, { id, name: step.type, status: 'running' }])
+          },
+          onStepEnd: (i, step, res) => {
+            const id = `skill-step-${i}`
+            let description: string | undefined
+            try { description = JSON.parse(res).description } catch { /* ignore */ }
+            setToolStatuses(prev =>
+              prev.map(ts => ts.id === id ? { ...ts, status: 'done' as const, result: res, description } : ts)
+            )
+          },
+          onTrackSwitch: () => {},
+          onHeal: () => {},
+          onTextDelta: (text) => {
+            currentText += text
+            setStreamingText(currentText)
+          },
+        },
+        abortController.signal,
+        undefined, // variables
+      )
+
+      const summary = result.success
+        ? `Skill "${skill.name}" completed successfully (${result.track} track, ${result.durationMs}ms).`
+        : `Skill "${skill.name}" failed (${result.track} track, ${result.durationMs}ms).`
+
+      const assistantMsg: ChatMessage = {
+        id: `msg_${Date.now()}_assistant`,
+        role: 'assistant',
+        content: summary,
+        createdAt: Date.now(),
+      }
+      setMessages(prev => [...prev, assistantMsg])
+    } catch (err: unknown) {
+      if (!abortController.signal.aborted) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
+    } finally {
+      setIsLoading(false)
+      setStreamingText('')
+      abortRef.current = null
+    }
+  }, [provider, isLoading])
+
   const stopAgent = useCallback(() => {
     abortRef.current?.abort()
     setIsLoading(false)
@@ -294,6 +376,7 @@ export function useChat(provider: LlmProvider | null) {
     toolStatuses,
     error,
     sendMessage,
+    runSkill,
     stopAgent,
     newChat,
     loadConversation,

@@ -112,7 +112,7 @@ Analyse the steps and return a single JSON object (no markdown fences) with thes
     - "description": string
     - "required": boolean
   Identify any values that look like they should be user-configurable (emails, names, URLs, search terms, etc.)
-- "skillMd": a Markdown document (as a single string with \\n newlines) that describes the skill, its purpose, parameters, and expected behaviour. This will be shown to the agent when replaying.
+- "skillMd": a Markdown document (as a single string with \\n newlines) that describes the skill's purpose and expected behaviour. Do NOT include a Parameters section — parameters are stored separately. This will be shown to the agent when replaying.
 
 Return ONLY the JSON object, nothing else.`
 
