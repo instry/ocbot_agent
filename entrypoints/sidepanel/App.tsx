@@ -28,20 +28,6 @@ export function App() {
   const pendingMessageRef = useRef<string | null>(null)
   const chatInputRef = useRef<ChatInputHandle>(null)
 
-  // Auto-dismiss "Save as Skill?" prompt after 8s
-  useEffect(() => {
-    if (!pendingSkillSave || skillSaved) return
-    const timer = setTimeout(() => dismissSkillSave(), 5000)
-    return () => clearTimeout(timer)
-  }, [pendingSkillSave, skillSaved, dismissSkillSave])
-
-  // Auto-dismiss "Saved successfully" prompt after 5s
-  useEffect(() => {
-    if (!skillSaved) return
-    const timer = setTimeout(() => setSkillSaved(false), 3000)
-    return () => clearTimeout(timer)
-  }, [skillSaved])
-
   // Process pending message once provider is ready
   useEffect(() => {
     if (pendingMessageRef.current && selectedProvider && !isLoading) {
@@ -158,25 +144,21 @@ export function App() {
             toolStatuses={toolStatuses}
             error={error}
           />
-          {pendingSkillSave && !skillSaved && (
+          {pendingSkillSave && !skillSaved && !skillSaving && (
             <div className="mx-3 my-2 flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
               <Puzzle className="h-4 w-4 shrink-0 text-muted-foreground" />
               <span className="flex-1 text-sm text-muted-foreground">Save this task as a Skill?</span>
               <button
-                disabled={skillSaving}
-                onClick={async () => {
+                onClick={() => {
                   setSkillSaving(true)
-                  try {
-                    const skill = await saveAsSkill()
+                  saveAsSkill().then(skill => {
                     setSkillSaved(true)
                     if (skill) setSavedSkillId(skill.id)
-                  } finally {
-                    setSkillSaving(false)
-                  }
+                  }).catch(() => {}).finally(() => setSkillSaving(false))
                 }}
-                className="rounded-lg bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+                className="rounded-lg bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
               >
-                {skillSaving ? 'Saving...' : 'Save'}
+                Save
               </button>
               <button
                 onClick={() => dismissSkillSave()}
