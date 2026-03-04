@@ -17,6 +17,7 @@ const TOOL_LABELS: Record<string, string> = {
   observe: 'Observing page',
   think: 'Thinking',
   ariaTree: 'Reading page structure',
+  screenshot: 'Capturing screenshot',
   fillForm: 'Filling form',
 }
 

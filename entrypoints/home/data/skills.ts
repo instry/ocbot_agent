@@ -645,7 +645,7 @@ const skillStoreInstance = new SkillStore()
 
 export async function getLocalSkills(): Promise<Skill[]> {
   const skills = await skillStoreInstance.list()
-  return skills.map(toDisplaySkill)
+  return skills.filter(s => s.source === 'user').map(toDisplaySkill)
 }
 
 export async function getLocalSkillDetail(id: string): Promise<SkillDetail | null> {

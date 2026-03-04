@@ -6,7 +6,7 @@ import { extract } from './extract'
 import { observe } from './observe'
 import { fillForm } from './fillForm'
 import { capturePageSnapshot } from './snapshot'
-import { ensureAttached } from './cdp'
+import { ensureAttached, sendCdp } from './cdp'
 import { substituteVariables } from './variables'
 
 export const BROWSER_TOOLS: ToolDefinition[] = [
@@ -92,6 +92,14 @@ export const BROWSER_TOOLS: ToolDefinition[] = [
   {
     name: 'ariaTree',
     description: 'Get the accessibility tree of the current page. Shows all elements with roles, names, values and node IDs. Use to understand page structure before acting.',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'screenshot',
+    description: 'Capture a screenshot of the current page. Use this to visually verify the page state, identify icon-only buttons, disambiguate similar elements, or confirm actions succeeded. Returns the image for visual inspection.',
     parameters: {
       type: 'object',
       properties: {},
@@ -266,6 +274,17 @@ export async function executeTool(
           elementCount: snapshot.elements.length,
           tree,
         })
+      }
+      case 'screenshot': {
+        const tabId = await getActiveTabId()
+        await ensureAttached(tabId)
+        const { data } = await sendCdp<{ data: string }>(tabId, 'Page.captureScreenshot', {
+          format: 'jpeg',
+          quality: 70,
+          optimizeForSpeed: true,
+        })
+        // Return special JSON marker — loop.ts will inject image into messages
+        return JSON.stringify({ __screenshot__: true, data, sizeKB: Math.round(data.length / 1024) })
       }
       case 'fillForm': {
         const result = await fillForm(args.fields || [], provider, cache, signal, variables)

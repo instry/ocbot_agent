@@ -1,11 +1,11 @@
-import type { LlmProvider, LlmRequestMessage, ToolCallPart, ContentPart } from '../llm/types'
+import type { LlmProvider, LlmRequestMessage, ToolCallPart } from '../llm/types'
 import type { ActCache } from './cache'
 import type { Variables } from './variables'
 import { streamChat } from '../llm/client'
 import { BROWSER_TOOLS, executeTool } from './tools'
 import { buildSystemPrompt } from './systemPrompt'
 import { capturePageSnapshot } from './snapshot'
-import { ensureAttached, sendCdp } from './cdp'
+import { ensureAttached } from './cdp'
 import {
   type AgentReplayStep,
   toolCallToReplayStep,
@@ -303,6 +303,31 @@ export async function runAgentLoop(
       callbacks.onToolCallEnd(tc.id, tc.name, result)
       callbacks.onToolMessage(tc.id, tc.name, result)
 
+      // Screenshot tool returns image data — inject as multimodal user message
+      if (tc.name === 'screenshot') {
+        try {
+          const parsed = JSON.parse(result)
+          if (parsed.__screenshot__ && parsed.data) {
+            // Tool result is a text placeholder for the LLM
+            allMessages.push({
+              role: 'tool',
+              content: JSON.stringify({ screenshot: 'captured', sizeKB: parsed.sizeKB }),
+              toolCallId: tc.id,
+            })
+            // Actual image goes as a user message so the LLM can see it
+            allMessages.push({
+              role: 'user',
+              content: [
+                { type: 'image', mediaType: 'image/jpeg', data: parsed.data },
+                { type: 'text', text: 'Here is the current page screenshot.' },
+              ],
+            })
+            console.log(`${TAG} 📸 Screenshot captured (${parsed.sizeKB}KB)`)
+            continue // skip the default tool message push below
+          }
+        } catch { /* fall through to normal handling */ }
+      }
+
       allMessages.push({
         role: 'tool',
         content: result,
@@ -315,31 +340,6 @@ export async function runAgentLoop(
         const step = toolCallToReplayStep(tc.name, args, result)
         if (step) recordedSteps.push(step)
       } catch { /* skip recording on parse error */ }
-    }
-
-    // Capture fresh screenshot after page-changing actions for next turn
-    const PAGE_CHANGING_TOOLS = new Set(['navigate', 'act', 'scroll', 'waitForNavigation', 'fillForm'])
-    const hasPageChange = toolCallArray.some(tc => PAGE_CHANGING_TOOLS.has(tc.name))
-    if (hasPageChange) {
-      try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-        if (tab?.id) {
-          await ensureAttached(tab.id)
-          const { data } = await sendCdp<{ data: string }>(tab.id, 'Page.captureScreenshot', {
-            format: 'jpeg',
-            quality: 70,
-            optimizeForSpeed: true,
-          })
-          allMessages.push({
-            role: 'user',
-            content: [
-              { type: 'image', mediaType: 'image/jpeg', data },
-              { type: 'text', text: 'Here is the current page screenshot after the actions above.' },
-            ],
-          })
-          console.log(`${TAG} 📸 Fresh screenshot captured (${(data.length / 1024).toFixed(0)}KB)`)
-        }
-      } catch { /* screenshot optional */ }
     }
 
     console.groupEnd() // turn

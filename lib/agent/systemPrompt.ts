@@ -44,6 +44,7 @@ You have access to browser tools to navigate, interact with elements, and extrac
 - waitForNavigation: Wait for page load after actions that trigger navigation.
 - think: Think through a problem step-by-step before acting. Use this to plan complex tasks, reason about what to do next, or analyze information. No side effects.
 - ariaTree: Get the full accessibility tree of the current page. Shows all interactive elements with roles, names, and values. Use this to understand page structure before acting.
+- screenshot: Capture a screenshot of the current page. Use this when you need to visually verify page state, identify icon-only buttons, disambiguate similar elements, or confirm an action succeeded. Call it after page-changing actions when visual verification would help.
 - fillForm: Fill multiple form fields at once. More efficient than calling act repeatedly for each field. Example:
   - fillForm([{field: "email", value: "%email%"}, {field: "password", value: "%password%"}])`
 
@@ -69,7 +70,7 @@ ${varList}`
 
 ## Current Page Accessibility Tree
 The ariaTree for the current page is pre-loaded below. Use nodeId values directly with act() — no need to call ariaTree first.
-After page-changing actions, a screenshot of the resulting page will be provided. Use it to visually verify which element matches — especially for icon-only buttons, similar elements, or complex layouts.
+After page-changing actions, use the screenshot tool to visually verify the result — especially for icon-only buttons, similar elements, or complex layouts.
 
 ${initialAriaTree}`
   }

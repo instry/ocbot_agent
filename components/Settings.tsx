@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
-import { Sliders, Cpu, Plus, Trash2, Pencil, Star, ArrowLeft, ChevronDown, Sun, Moon, Monitor, Globe } from 'lucide-react'
+import { Sliders, Cpu, Plus, Trash2, Pencil, Star, ArrowLeft, ChevronDown, Sun, Moon, Monitor, Globe, Database } from 'lucide-react'
 import type { LlmProvider } from '@/lib/llm/types'
 import { getTemplateByType } from '@/lib/llm/models'
 import type { ColorScheme, Language } from '@/lib/hooks/useSettings'
 import { ProviderForm } from './ProviderForm'
+import { SkillStore } from '@/lib/skills/store'
 
 // --- Types ---
 
-type SettingsTab = 'general' | 'providers'
+type SettingsTab = 'general' | 'providers' | 'data'
 type ProvidersView = 'list' | 'add' | 'edit'
 
 interface SettingsProps {
@@ -35,6 +36,7 @@ export function Settings({
   const tabs: { id: SettingsTab; label: string; icon: typeof Sliders }[] = [
     { id: 'providers', label: 'Models', icon: Cpu },
     { id: 'general', label: 'General', icon: Sliders },
+    { id: 'data', label: 'Data', icon: Database },
   ]
 
   return (
@@ -85,6 +87,7 @@ export function Settings({
             onSelectProvider={onSelectProvider}
           />
         )}
+        {activeTab === 'data' && <DataTab />}
       </div>
     </div>
   )
@@ -309,6 +312,135 @@ function ProvidersTab({
           <Plus className="h-4 w-4" />
           Add Model
         </button>
+      </div>
+    </div>
+  )
+}
+
+// --- Data Tab ---
+
+function DataTab() {
+  const [stats, setStats] = useState<{ autoSkills: number; userSkills: number; executions: number; bytesUsed: number } | null>(null)
+  const [clearing, setClearing] = useState<string | null>(null)
+
+  const loadStats = async () => {
+    const store = new SkillStore()
+    const skills = await store.list()
+    const autoSkills = skills.filter(s => s.source === 'auto').length
+    const userSkills = skills.filter(s => s.source === 'user').length
+    const bytesUsed = await new Promise<number>(resolve =>
+      chrome.storage.local.getBytesInUse(['ocbot_skills', 'ocbot_skill_executions'], resolve)
+    )
+    // Count total executions
+    const execResult = await chrome.storage.local.get('ocbot_skill_executions')
+    const allExecs = (execResult.ocbot_skill_executions || {}) as Record<string, unknown[]>
+    const executions = Object.values(allExecs).reduce((sum, arr) => sum + arr.length, 0)
+    setStats({ autoSkills, userSkills, executions, bytesUsed })
+  }
+
+  useEffect(() => { loadStats() }, [])
+
+  const clearAutoSkills = async () => {
+    setClearing('auto')
+    const store = new SkillStore()
+    const skills = await store.list()
+    for (const s of skills) {
+      if (s.source === 'auto') await store.delete(s.id)
+    }
+    await loadStats()
+    setClearing(null)
+  }
+
+  const clearExecutions = async () => {
+    setClearing('exec')
+    await chrome.storage.local.remove('ocbot_skill_executions')
+    await loadStats()
+    setClearing(null)
+  }
+
+  const clearAll = async () => {
+    setClearing('all')
+    await chrome.storage.local.remove(['ocbot_skills', 'ocbot_skill_executions'])
+    await loadStats()
+    setClearing(null)
+  }
+
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    return `${(bytes / 1024).toFixed(1)} KB`
+  }
+
+  return (
+    <div className="flex h-full flex-col px-8 pb-10">
+      <div className="sticky top-0 z-10 bg-background pt-6 pb-6">
+        <h2 className="text-base font-semibold text-foreground">Data</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Manage cached skills and execution history.</p>
+      </div>
+
+      <div className="flex max-w-[640px] flex-col gap-8">
+        {/* Storage Stats */}
+        {stats && (
+          <SettingsSection title="Storage">
+            <div className="flex flex-wrap gap-6 py-3.5">
+              <div className="flex flex-col">
+                <span className="text-lg font-semibold text-foreground">{stats.userSkills}</span>
+                <span className="text-xs text-muted-foreground">Saved Skills</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-lg font-semibold text-foreground">{stats.autoSkills}</span>
+                <span className="text-xs text-muted-foreground">Auto Skills</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-lg font-semibold text-foreground">{stats.executions}</span>
+                <span className="text-xs text-muted-foreground">Executions</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-lg font-semibold text-foreground">{formatBytes(stats.bytesUsed)}</span>
+                <span className="text-xs text-muted-foreground">Storage Used</span>
+              </div>
+            </div>
+          </SettingsSection>
+        )}
+
+        {/* Clear Actions */}
+        <SettingsSection title="Clear Data">
+          <SettingsRow
+            title="Auto Skills"
+            description="Cached task replays generated automatically. Safe to clear."
+          >
+            <button
+              onClick={clearAutoSkills}
+              disabled={clearing !== null}
+              className="cursor-pointer rounded-lg border border-border/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+            >
+              {clearing === 'auto' ? 'Clearing...' : 'Clear'}
+            </button>
+          </SettingsRow>
+          <SettingsRow
+            title="Execution History"
+            description="Logs of past skill runs. Does not affect skill functionality."
+          >
+            <button
+              onClick={clearExecutions}
+              disabled={clearing !== null}
+              className="cursor-pointer rounded-lg border border-border/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+            >
+              {clearing === 'exec' ? 'Clearing...' : 'Clear'}
+            </button>
+          </SettingsRow>
+          <SettingsRow
+            title="All Data"
+            description="Remove all skills (saved + auto) and execution history."
+          >
+            <button
+              onClick={clearAll}
+              disabled={clearing !== null}
+              className="cursor-pointer rounded-lg border border-destructive/50 bg-destructive/5 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+            >
+              {clearing === 'all' ? 'Clearing...' : 'Clear All'}
+            </button>
+          </SettingsRow>
+        </SettingsSection>
       </div>
     </div>
   )
