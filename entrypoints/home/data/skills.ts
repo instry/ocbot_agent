@@ -8,6 +8,7 @@ export interface Skill {
   version: string
   official?: boolean
   author: string
+  creating?: boolean
 }
 
 /** Known brand keywords → abbreviation for icon fallback */
@@ -615,6 +616,7 @@ export function toDisplaySkill(real: RealSkill): Skill {
     version: `v${real.version}`,
     official: false,
     author: real.author,
+    creating: real.status === 'creating',
   }
 }
 

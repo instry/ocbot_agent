@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { Search, ChevronLeft, ChevronRight, BadgeCheck, GitFork } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, BadgeCheck, GitFork, Loader2 } from 'lucide-react'
 import { MOCK_SKILLS, getSkillAbbr, getLocalSkills, getLocalSkillDetail, deleteLocalSkill, type Skill } from '../data/skills'
 import { SkillDetailPage } from './SkillDetailPage'
 import { SkillEditPage } from './SkillEditPage'
@@ -42,16 +42,25 @@ function SkillIcon({ skill, className = "h-10 w-10" }: { skill: Skill, className
 }
 
 function SkillCard({ skill, onClick }: { skill: Skill; onClick: () => void }) {
+  const isCreating = skill.creating
   return (
     <div
-      onClick={onClick}
-      className="flex cursor-pointer flex-col rounded-xl border border-border/40 bg-card p-4 shadow-sm transition-all hover:bg-accent/50 hover:shadow-md"
+      onClick={isCreating ? undefined : onClick}
+      className={`flex flex-col rounded-xl border border-border/40 bg-card p-4 shadow-sm transition-all ${
+        isCreating ? 'opacity-70' : 'cursor-pointer hover:bg-accent/50 hover:shadow-md'
+      }`}
     >
       <div className="flex items-start gap-4">
         <SkillIcon skill={skill} className="h-12 w-12" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-base font-semibold text-foreground">{skill.name}</span>
+            {isCreating && (
+              <span className="flex shrink-0 items-center gap-1 rounded-md border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-500">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Creating…
+              </span>
+            )}
             {skill.official && (
               <span className="flex shrink-0 items-center gap-1 rounded-md border border-orange-500/30 bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-500">
                 <BadgeCheck className="h-3 w-3" />
@@ -72,7 +81,7 @@ function SkillCard({ skill, onClick }: { skill: Skill; onClick: () => void }) {
         </div>
       </div>
       <p className="mt-3 line-clamp-2 flex-1 text-sm text-muted-foreground">
-        {skill.description}
+        {isCreating ? 'AI is generating skill metadata…' : skill.description}
       </p>
       <div className="mt-3 flex items-center justify-between border-t border-border/30 pt-3 text-xs text-muted-foreground/80">
         <span className="font-mono">{skill.version}</span>
@@ -104,17 +113,29 @@ export function SkillsPage() {
     getLocalSkills().then(setMySkills)
   }, [])
 
-  // Auto-open skill detail if URL has ?id= parameter
+  // Auto-refresh when skills storage changes (e.g. skill created from sidepanel)
   useEffect(() => {
-    const hash = window.location.hash // e.g. #/skills?id=xxx
+    const listener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if (changes.ocbot_skills) {
+        getLocalSkills().then(setMySkills)
+      }
+    }
+    chrome.storage.local.onChanged.addListener(listener)
+    return () => chrome.storage.local.onChanged.removeListener(listener)
+  }, [])
+
+  // Auto-open skill detail if URL has /detail?id= or legacy ?id= parameter
+  useEffect(() => {
+    const hash = window.location.hash // e.g. #/skills/detail?id=xxx or #/skills?id=xxx
     const match = hash.match(/[?&]id=([^&]+)/)
     if (match) {
       const skillId = decodeURIComponent(match[1])
       setActiveTab('my-skills')
       getLocalSkillDetail(skillId).then((detail) => {
-        if (detail) setSelectedSkill(detail)
-        // Clean up URL after loading
-        history.replaceState(null, '', '#/skills')
+        if (detail) {
+          setSelectedSkill(detail)
+          history.replaceState(null, '', `#/skills/detail?id=${skillId}`)
+        }
       })
     }
   }, [])
@@ -168,7 +189,7 @@ export function SkillsPage() {
     return (
       <SkillDetailPage
         skill={selectedSkill}
-        onBack={() => setSelectedSkill(null)}
+        onBack={() => { setSelectedSkill(null); history.replaceState(null, '', '#/skills') }}
         backLabel={activeTab === 'my-skills' ? 'Back to My Skills' : 'Back to Marketplace'}
         onRun={handleRunSkill}
         onDelete={activeTab === 'my-skills' ? handleDeleteSkill : undefined}
@@ -259,7 +280,10 @@ export function SkillsPage() {
         <>
           <div className="mt-3 grid grid-cols-3 gap-4">
             {paged.map((skill) => (
-              <SkillCard key={skill.id} skill={skill} onClick={() => setSelectedSkill(skill)} />
+              <SkillCard key={skill.id} skill={skill} onClick={() => {
+                setSelectedSkill(skill)
+                history.replaceState(null, '', `#/skills/detail?id=${skill.id}`)
+              }} />
             ))}
           </div>
 

@@ -5,6 +5,7 @@ import { ChatInput } from '@/components/ChatInput'
 import type { ChatInputHandle } from '@/components/ChatInput'
 import { SuggestionChips } from '@/components/SuggestionChips'
 import { ChatList } from '@/components/ChatList'
+import { SkillParamForm } from '@/components/SkillParamForm'
 import { Header } from './components/Header'
 import { useLlmProvider } from '@/lib/llm/useLlmProvider'
 import { useChat } from '@/lib/hooks/useChat'
@@ -20,6 +21,7 @@ export function App() {
     toolStatuses, error, sendMessage, runSkill, stopAgent, newChat,
     loadConversation, removeConversation,
     pendingSkillSave, saveAsSkill, dismissSkillSave,
+    pendingSkillParams, confirmSkillParams, cancelSkillParams,
   } = useChat(selectedProvider)
   const [channelStatuses, setChannelStatuses] = useState<Record<string, ChannelStatus>>({})
   const [skillSaving, setSkillSaving] = useState(false)
@@ -95,6 +97,13 @@ export function App() {
     return () => chrome.storage.local.onChanged.removeListener(listener)
   }, [newChat, loadConversation])
 
+  // Auto-dismiss skill saved toast after 3s
+  useEffect(() => {
+    if (!skillSaved) return
+    const timer = setTimeout(() => setSkillSaved(false), 3000)
+    return () => clearTimeout(timer)
+  }, [skillSaved])
+
   const refreshChannelStatuses = useCallback(() => {
     chrome.runtime.sendMessage({ type: 'getChannelStatuses', timestamp: Date.now() }, (resp) => {
       if (resp?.ok) {
@@ -144,6 +153,13 @@ export function App() {
             toolStatuses={toolStatuses}
             error={error}
           />
+          {pendingSkillParams && (
+            <SkillParamForm
+              skill={pendingSkillParams}
+              onConfirm={confirmSkillParams}
+              onCancel={cancelSkillParams}
+            />
+          )}
           {pendingSkillSave && !skillSaved && !skillSaving && (
             <div className="mx-3 my-2 flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
               <Puzzle className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -175,7 +191,7 @@ export function App() {
               {savedSkillId && (
                 <button
                   onClick={async () => {
-                    const url = chrome.runtime.getURL(`home.html#/skills?id=${savedSkillId}`)
+                    const url = chrome.runtime.getURL(`home.html#/skills/detail?id=${savedSkillId}`)
                     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
                     if (tab?.id) {
                       await chrome.tabs.update(tab.id, { url })

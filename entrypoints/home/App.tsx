@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { WelcomeHero } from '@/components/WelcomeHero'
 import { ChatInput } from '@/components/ChatInput'
 import type { ChatInputHandle } from '@/components/ChatInput'
@@ -59,17 +59,39 @@ function NewSessionPage({
 export function App() {
   const [page, setPage] = useState<Page>(() => {
     const hash = window.location.hash.replace('#/', '').split('?')[0]
-    if (['skills', 'claw', 'settings', 'about'].includes(hash)) return hash as Page
+    const base = hash.split('/')[0]
+    if (['skills', 'claw', 'settings', 'about'].includes(base)) return base as Page
     return 'new-session'
   })
   const { providers, selectedProvider, saveProvider, deleteProvider, selectProvider } = useLlmProvider()
   const { colorScheme, language, setColorScheme, setLanguage } = useSettings()
 
+  const navigateTo = useCallback((p: Page) => {
+    setPage(p)
+    const hash = p === 'new-session' ? '#/home' : `#/${p}`
+    history.replaceState(null, '', hash)
+  }, [])
+
+  // Sync page state when browser back/forward changes the hash
+  useEffect(() => {
+    const onHashChange = () => {
+      const hash = window.location.hash.replace('#/', '').split('?')[0]
+      const base = hash.split('/')[0]
+      if (['skills', 'claw', 'settings', 'about'].includes(base)) {
+        setPage(base as Page)
+      } else {
+        setPage('new-session')
+      }
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
   return (
     <div className="flex h-screen w-screen bg-background text-foreground">
       <Sidebar
         activePage={page}
-        onNavigate={setPage}
+        onNavigate={navigateTo}
         onSelectConversation={async (id) => {
           await chrome.storage.local.set({ ocbot_load_conversation: id })
           const { id: windowId } = await chrome.windows.getCurrent()

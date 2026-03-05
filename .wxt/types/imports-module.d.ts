@@ -26,6 +26,7 @@ declare module '#imports' {
   export { ProviderForm } from '../components/ProviderForm';
   export { RemoteChannels } from '../components/RemoteChannels';
   export { Settings } from '../components/Settings';
+  export { SkillParamForm } from '../components/SkillParamForm';
   export { SuggestionChips } from '../components/SuggestionChips';
   export { WelcomeHero } from '../components/WelcomeHero';
 }

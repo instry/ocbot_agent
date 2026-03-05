@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import type { ChatMessage, Conversation } from '@/lib/types'
 import type { LlmProvider, LlmRequestMessage } from '@/lib/llm/types'
 import type { AgentReplayStep } from '@/lib/agent/agentCache'
+import type { Skill } from '@/lib/skills/types'
 import { runAgentLoop } from '@/lib/agent/loop'
 import { ActCache } from '@/lib/agent/cache'
 import { createSkillFromExecution } from '@/lib/skills/create'
@@ -39,6 +40,7 @@ export function useChat(provider: LlmProvider | null) {
     instruction: string
     startUrl: string
   } | null>(null)
+  const [pendingSkillParams, setPendingSkillParams] = useState<Skill | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   // Track the current conversation's title for saving
   const convMetaRef = useRef<{ title?: string }>({})
@@ -276,15 +278,8 @@ export function useChat(provider: LlmProvider | null) {
     }
   }, [provider, messages, isLoading])
 
-  const runSkill = useCallback(async (skillId: string) => {
-    if (!provider || isLoading) return
-
-    const store = new SkillStore()
-    const skill = await store.get(skillId)
-    if (!skill) {
-      setError(`Skill not found: ${skillId}`)
-      return
-    }
+  const executeSkill = useCallback(async (skill: Skill, params: Record<string, string>) => {
+    if (!provider) return
 
     setError(null)
     setIsLoading(true)
@@ -292,10 +287,13 @@ export function useChat(provider: LlmProvider | null) {
     setToolStatuses([])
 
     // Show a user-like message so it's clear what happened
+    const paramSummary = Object.entries(params).length > 0
+      ? `\n${Object.entries(params).map(([k, v]) => `  ${k}: ${v}`).join('\n')}`
+      : ''
     const userMsg: ChatMessage = {
       id: `msg_${Date.now()}`,
       role: 'user',
-      content: `Run skill: ${skill.name}`,
+      content: `Run skill: ${skill.name}${paramSummary}`,
       createdAt: Date.now(),
     }
     setMessages(prev => [...prev, userMsg])
@@ -305,10 +303,10 @@ export function useChat(provider: LlmProvider | null) {
     let currentText = ''
 
     try {
-      const runner = new SkillRunner(store)
+      const runner = new SkillRunner(new SkillStore())
       const result = await runner.execute(
         skill,
-        {},
+        params,
         provider,
         actCache,
         {
@@ -355,7 +353,44 @@ export function useChat(provider: LlmProvider | null) {
       setStreamingText('')
       abortRef.current = null
     }
-  }, [provider, isLoading])
+  }, [provider])
+
+  const runSkill = useCallback(async (skillId: string) => {
+    if (!provider || isLoading) return
+
+    const store = new SkillStore()
+    const skill = await store.get(skillId)
+    if (!skill) {
+      setError(`Skill not found: ${skillId}`)
+      return
+    }
+
+    // Check if skill has required parameters that need user input
+    const requiredParams = skill.parameters.filter(p => p.required && p.default == null)
+    if (requiredParams.length > 0) {
+      // Show parameter form in chat
+      setPendingSkillParams(skill)
+      return
+    }
+
+    // No required params — build defaults and execute immediately
+    const params: Record<string, string> = {}
+    for (const p of skill.parameters) {
+      if (p.default != null) params[p.name] = String(p.default)
+    }
+    await executeSkill(skill, params)
+  }, [provider, isLoading, executeSkill])
+
+  const confirmSkillParams = useCallback(async (params: Record<string, string>) => {
+    const skill = pendingSkillParams
+    if (!skill) return
+    setPendingSkillParams(null)
+    await executeSkill(skill, params)
+  }, [pendingSkillParams, executeSkill])
+
+  const cancelSkillParams = useCallback(() => {
+    setPendingSkillParams(null)
+  }, [])
 
   const stopAgent = useCallback(() => {
     abortRef.current?.abort()
@@ -376,11 +411,44 @@ export function useChat(provider: LlmProvider | null) {
   const saveAsSkill = useCallback(async () => {
     if (!pendingSkillSave || !provider) return
     const { steps, instruction, startUrl } = pendingSkillSave
-    const skill = await createSkillFromExecution(instruction, steps, startUrl, provider)
-    const store = new SkillStore()
-    await store.save(skill)
     setPendingSkillSave(null)
-    return skill
+
+    // Save a placeholder immediately so it shows up in My Skills as "Creating..."
+    const placeholderId = crypto.randomUUID()
+    const store = new SkillStore()
+    const now = Date.now()
+    await store.save({
+      id: placeholderId,
+      name: instruction.length > 30 ? instruction.slice(0, 30) + '…' : instruction,
+      description: instruction,
+      version: 1,
+      categories: [],
+      parameters: [],
+      author: 'agent',
+      createdAt: now,
+      updatedAt: now,
+      skillMd: '',
+      steps,
+      startUrl,
+      score: 1,
+      status: 'creating',
+      totalRuns: 0,
+      successCount: 0,
+      source: 'user',
+      instruction: '',
+      configSignature: '',
+    })
+
+    // Run LLM creation in background, then update the placeholder
+    try {
+      const skill = await createSkillFromExecution(instruction, steps, startUrl, provider)
+      skill.id = placeholderId
+      await store.save(skill)
+    } catch {
+      // On failure, remove the placeholder
+      await store.delete(placeholderId)
+    }
+    return { id: placeholderId } as { id: string }
   }, [pendingSkillSave, provider])
 
   const dismissSkillSave = useCallback(() => {
@@ -404,5 +472,8 @@ export function useChat(provider: LlmProvider | null) {
     pendingSkillSave,
     saveAsSkill,
     dismissSkillSave,
+    pendingSkillParams,
+    confirmSkillParams,
+    cancelSkillParams,
   }
 }

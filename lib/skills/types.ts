@@ -28,7 +28,7 @@ export interface Skill {
   startUrl: string
 
   score: number
-  status: 'active' | 'degraded' | 'archived'
+  status: 'active' | 'degraded' | 'archived' | 'creating'
   totalRuns: number
   successCount: number
   fragileSteps?: number[]

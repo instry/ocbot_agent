@@ -13,6 +13,7 @@ declare global {
   const ProviderForm: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/ProviderForm').ProviderForm
   const RemoteChannels: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/RemoteChannels').RemoteChannels
   const Settings: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/Settings').Settings
+  const SkillParamForm: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/SkillParamForm').SkillParamForm
   const SuggestionChips: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/SuggestionChips').SuggestionChips
   const ToolBatch: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/MessageBubble').ToolBatch
   const WelcomeHero: typeof import('/Users/ekko/git/ocbot/ocbot/ocbot_agent/components/WelcomeHero').WelcomeHero
