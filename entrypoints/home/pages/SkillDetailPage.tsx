@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ArrowLeft, Star, GitFork, BadgeCheck, Play, Copy, ImageOff, Trash2, Pencil } from 'lucide-react'
-import { getSkillDetail, getLocalSkillDetail, getSkillAbbr, type Skill, type SkillDetail } from '../data/skills'
+import { ArrowLeft, Star, GitFork, BadgeCheck, Play, Copy, ImageOff, Trash2, Pencil, Upload, XCircle, Check, Loader2 } from 'lucide-react'
+import { getLocalSkillDetail, getMarketplaceSkillDetail, getSkillAbbr, skillStoreInstance, getRealSkill, type Skill, type SkillDetail } from '../data/skills'
+import { publishSkill, unpublishSkill, cloneSkill as apiCloneSkill } from '@/lib/marketplace/api'
+import type { Skill as RealSkill } from '@/lib/skills/types'
+import { useAuth } from '@/lib/hooks/useAuth'
 
 // ---------------------------------------------------------------------------
 // Lightweight Markdown renderer — handles headings, lists, bold, code, hr
@@ -224,23 +227,131 @@ function formatCount(n: number): string {
   return n.toString()
 }
 
-export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplace', onRun, onDelete, onEdit }: {
+export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplace', onRun, onDelete, onEdit, onCloned }: {
   skill: Skill; onBack: () => void; backLabel?: string;
   onRun?: (skill: Skill) => void;
   onDelete?: (skillId: string) => void
   onEdit?: (skillId: string) => void
+  onCloned?: () => void
 }) {
   const [detail, setDetail] = useState<SkillDetail | null>(null)
+  const [cloning, setCloning] = useState(false)
+  const [cloneSuccess, setCloneSuccess] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [publishedId, setPublishedId] = useState<string | null>(skill.publishedId || null)
+  const { isAuthenticated, user } = useAuth()
+
+  const isMarketplaceSkill = !!skill.publishedId
+  const isLocalSkill = !!onEdit // onEdit is only provided for my-skills tab
 
   useEffect(() => {
-    getLocalSkillDetail(skill.id).then(local => {
-      if (local) {
-        setDetail(local)
-      } else {
-        setDetail(getSkillDetail(skill.id))
+    if (isMarketplaceSkill) {
+      // Marketplace skill — fetch detail from server
+      getMarketplaceSkillDetail(skill.id).then(remote => {
+        if (remote) setDetail(remote)
+      })
+    } else {
+      // Local skill — fetch from local store
+      getLocalSkillDetail(skill.id).then(local => {
+        if (local) setDetail(local)
+      })
+    }
+  }, [skill.id, isMarketplaceSkill])
+
+  // Check if local skill is already published
+  useEffect(() => {
+    if (!isLocalSkill || !isAuthenticated) return
+    // Check local storage for publish mapping
+    chrome.storage.local.get('ocbot_published_skills').then((result) => {
+      const mapping = result.ocbot_published_skills || {}
+      if (mapping[skill.id]) {
+        setPublishedId(mapping[skill.id])
       }
     })
-  }, [skill.id])
+  }, [skill.id, isLocalSkill, isAuthenticated])
+
+  const handleClone = async () => {
+    if (!skill.publishedId) return
+    setCloning(true)
+    try {
+      // Fetch the full marketplace skill to get the data blob
+      const ms = await import('@/lib/marketplace/api').then(m => m.fetchMarketplaceSkill(skill.publishedId!))
+      const skillData: RealSkill = JSON.parse(ms.data)
+
+      // Create a cloned copy
+      const clonedSkill: RealSkill = {
+        ...skillData,
+        id: crypto.randomUUID(),
+        sourceSkillId: ms.skill_id,
+        source: 'user',
+        author: 'cloned',
+        totalRuns: 0,
+        successCount: 0,
+        score: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        status: 'active',
+      }
+
+      await skillStoreInstance.save(clonedSkill)
+      // Increment clone count on server (fire and forget)
+      apiCloneSkill(skill.publishedId!).catch(() => {})
+      setCloneSuccess(true)
+      onCloned?.()
+    } catch (e) {
+      console.error('Failed to clone skill:', e)
+    } finally {
+      setCloning(false)
+    }
+  }
+
+  const handlePublish = async () => {
+    if (!isAuthenticated || !user) return
+    setPublishing(true)
+    try {
+      const realSkill = await getRealSkill(skill.id)
+      if (!realSkill) return
+
+      const result = await publishSkill({
+        skill_id: realSkill.id,
+        author_name: user.email?.split('@')[0] || 'anonymous',
+        name: realSkill.name,
+        description: realSkill.description,
+        categories: JSON.stringify(realSkill.categories),
+        data: JSON.stringify(realSkill),
+        version: realSkill.version,
+      })
+
+      // Save mapping locally
+      const stored = await chrome.storage.local.get('ocbot_published_skills')
+      const mapping = stored.ocbot_published_skills || {}
+      mapping[skill.id] = result.id
+      await chrome.storage.local.set({ ocbot_published_skills: mapping })
+      setPublishedId(result.id)
+    } catch (e) {
+      console.error('Failed to publish skill:', e)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  const handleUnpublish = async () => {
+    if (!publishedId) return
+    setPublishing(true)
+    try {
+      await unpublishSkill(publishedId)
+      // Remove from local mapping
+      const stored = await chrome.storage.local.get('ocbot_published_skills')
+      const mapping = stored.ocbot_published_skills || {}
+      delete mapping[skill.id]
+      await chrome.storage.local.set({ ocbot_published_skills: mapping })
+      setPublishedId(null)
+    } catch (e) {
+      console.error('Failed to unpublish skill:', e)
+    } finally {
+      setPublishing(false)
+    }
+  }
 
   if (!detail) return null
 
@@ -278,11 +389,13 @@ export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplac
                 <span>Updated {detail.updatedAt}</span>
               </div>
               <div className="mt-1.5 flex items-center gap-3 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-                  <span className="font-medium text-foreground">{detail.rating}</span>
-                  <span>({detail.reviewCount} reviews)</span>
-                </span>
+                {detail.rating > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                    <span className="font-medium text-foreground">{detail.rating}</span>
+                    <span>({detail.reviewCount} reviews)</span>
+                  </span>
+                )}
                 <span className="flex items-center gap-1">
                   <GitFork className="h-3.5 w-3.5" />
                   {formatCount(detail.installs)} clones
@@ -293,10 +406,22 @@ export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplac
 
           {/* Action buttons */}
           <div className="flex items-center gap-3">
-            <button className="flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-              <Copy className="h-4 w-4" />
-              Clone
-            </button>
+            {isMarketplaceSkill && (
+              <button
+                onClick={handleClone}
+                disabled={cloning || cloneSuccess}
+                className="flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-60"
+              >
+                {cloning ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : cloneSuccess ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+                {cloning ? 'Cloning…' : cloneSuccess ? 'Cloned!' : 'Clone'}
+              </button>
+            )}
             <button
               onClick={() => onRun?.(skill)}
               className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/60 px-5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/80"
@@ -311,6 +436,26 @@ export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplac
               >
                 <Pencil className="h-4 w-4" />
                 Edit
+              </button>
+            )}
+            {isLocalSkill && isAuthenticated && !publishedId && (
+              <button
+                onClick={handlePublish}
+                disabled={publishing}
+                className="flex cursor-pointer items-center gap-2 rounded-xl border border-primary/40 bg-primary/5 px-5 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-60"
+              >
+                {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {publishing ? 'Publishing…' : 'Publish'}
+              </button>
+            )}
+            {isLocalSkill && isAuthenticated && publishedId && (
+              <button
+                onClick={handleUnpublish}
+                disabled={publishing}
+                className="flex cursor-pointer items-center gap-2 rounded-xl border border-amber-500/30 px-5 py-2 text-sm font-medium text-amber-600 transition-colors hover:bg-amber-500/10 disabled:opacity-60"
+              >
+                {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                {publishing ? 'Unpublishing…' : 'Unpublish'}
               </button>
             )}
             {onDelete && (

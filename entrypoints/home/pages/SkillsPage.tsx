@@ -1,6 +1,6 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Search, ChevronLeft, ChevronRight, BadgeCheck, GitFork, Loader2, Cloud, CloudOff, RefreshCw } from 'lucide-react'
-import { MOCK_SKILLS, getSkillAbbr, getLocalSkills, getLocalSkillDetail, deleteLocalSkill, type Skill } from '../data/skills'
+import { getSkillAbbr, getLocalSkills, getLocalSkillDetail, deleteLocalSkill, getMarketplaceSkills, type Skill } from '../data/skills'
 import { SkillDetailPage } from './SkillDetailPage'
 import { SkillEditPage } from './SkillEditPage'
 import { useAuth } from '@/lib/hooks/useAuth'
@@ -100,6 +100,8 @@ function SkillCard({ skill, onClick }: { skill: Skill; onClick: () => void }) {
   )
 }
 
+const PAGE_SIZE = 30
+
 export function SkillsPage() {
   const [query, setQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('All')
@@ -107,11 +109,17 @@ export function SkillsPage() {
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'marketplace' | 'my-skills'>('my-skills')
-  const PAGE_SIZE = 30
 
   const [mySkills, setMySkills] = useState<Skill[]>([])
   const { isAuthenticated } = useAuth()
   const { syncStatus, lastSyncAt, triggerSync } = useSkillSync()
+
+  // Marketplace state
+  const [marketplaceSkills, setMarketplaceSkills] = useState<Skill[]>([])
+  const [marketplaceTotal, setMarketplaceTotal] = useState(0)
+  const [marketplaceLoading, setMarketplaceLoading] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
     getLocalSkills().then(setMySkills)
   }, [])
@@ -143,6 +151,31 @@ export function SkillsPage() {
     }
   }, [])
 
+  // Fetch marketplace skills from server when tab/category/query/page changes
+  useEffect(() => {
+    if (activeTab !== 'marketplace') return
+
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setMarketplaceLoading(true)
+      const offset = (page - 1) * PAGE_SIZE
+      getMarketplaceSkills(selectedCategory, query, offset, PAGE_SIZE)
+        .then(({ skills, total }) => {
+          setMarketplaceSkills(skills)
+          setMarketplaceTotal(total)
+        })
+        .catch(() => {
+          setMarketplaceSkills([])
+          setMarketplaceTotal(0)
+        })
+        .finally(() => setMarketplaceLoading(false))
+    }, query ? 300 : 0) // debounce search input, instant for category/page
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [activeTab, selectedCategory, query, page])
+
   const refreshMySkills = useCallback(() => {
     getLocalSkills().then(setMySkills)
   }, [])
@@ -158,12 +191,9 @@ export function SkillsPage() {
     await chrome.sidePanel.open({ windowId: windowId! })
   }, [])
 
-  const filtered = useMemo(() => {
-    setPage(1)
-    let skills = activeTab === 'my-skills' ? mySkills : MOCK_SKILLS
-    if (activeTab === 'marketplace' && selectedCategory !== 'All') {
-      skills = skills.filter((s) => s.categories.includes(selectedCategory))
-    }
+  // For my-skills tab: local filtering
+  const filteredMySkills = useMemo(() => {
+    let skills = mySkills
     if (query.trim()) {
       const q = query.toLowerCase()
       skills = skills.filter(
@@ -173,10 +203,26 @@ export function SkillsPage() {
       )
     }
     return skills
-  }, [query, selectedCategory, activeTab, mySkills])
+  }, [query, mySkills])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  // Determine which skills to display
+  const displaySkills = activeTab === 'my-skills' ? filteredMySkills : marketplaceSkills
+  const totalForPagination = activeTab === 'my-skills' ? filteredMySkills.length : marketplaceTotal
+  const totalPages = Math.max(1, Math.ceil(totalForPagination / PAGE_SIZE))
+  const paged = activeTab === 'my-skills'
+    ? filteredMySkills.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+    : marketplaceSkills // already server-paginated
+
+  // Reset page when switching tabs or changing filters
+  const handleTabChange = useCallback((tab: 'marketplace' | 'my-skills') => {
+    setActiveTab(tab)
+    setPage(1)
+  }, [])
+
+  const handleCategoryChange = useCallback((cat: string) => {
+    setSelectedCategory(cat)
+    setPage(1)
+  }, [])
 
   if (editingSkillId) {
     return (
@@ -197,6 +243,7 @@ export function SkillsPage() {
         onRun={handleRunSkill}
         onDelete={activeTab === 'my-skills' ? handleDeleteSkill : undefined}
         onEdit={activeTab === 'my-skills' ? (id) => { setSelectedSkill(null); setEditingSkillId(id) } : undefined}
+        onCloned={activeTab === 'marketplace' ? () => { refreshMySkills() } : undefined}
       />
     )
   }
@@ -219,7 +266,7 @@ export function SkillsPage() {
       {/* Tab toggle */}
       <div className="mt-4 flex items-center gap-4 border-b border-border/40">
         <button
-          onClick={() => setActiveTab('my-skills')}
+          onClick={() => handleTabChange('my-skills')}
           className={`cursor-pointer pb-2 text-sm transition-colors ${
             activeTab === 'my-skills'
               ? 'border-b-2 border-primary font-semibold text-foreground'
@@ -229,14 +276,14 @@ export function SkillsPage() {
           My Skills ({mySkills.length})
         </button>
         <button
-          onClick={() => setActiveTab('marketplace')}
+          onClick={() => handleTabChange('marketplace')}
           className={`cursor-pointer pb-2 text-sm transition-colors ${
             activeTab === 'marketplace'
               ? 'border-b-2 border-primary font-semibold text-foreground'
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          Marketplace
+          Marketplace{marketplaceTotal > 0 ? ` (${marketplaceTotal})` : ''}
         </button>
         {isAuthenticated && (
           <button
@@ -262,7 +309,7 @@ export function SkillsPage() {
         <input
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => { setQuery(e.target.value); setPage(1) }}
           placeholder="Search skills..."
           className="w-full rounded-xl border border-border/50 bg-muted/50 py-2.5 pl-9 pr-4 text-sm shadow-sm outline-none transition-colors placeholder:text-muted-foreground/70 hover:border-border focus:border-primary"
         />
@@ -273,7 +320,7 @@ export function SkillsPage() {
           {CATEGORIES.map((cat) => (
             <button
               key={cat}
-              onClick={() => setSelectedCategory(cat)}
+              onClick={() => handleCategoryChange(cat)}
               className={`cursor-pointer rounded-full border px-3 py-1 text-xs transition-colors ${
                 selectedCategory === cat
                   ? 'border-primary bg-primary text-primary-foreground'
@@ -286,15 +333,24 @@ export function SkillsPage() {
         </div>
       )}
 
-      {activeTab === 'my-skills' && filtered.length === 0 ? (
+      {activeTab === 'marketplace' && marketplaceLoading ? (
+        <div className="mt-12 flex flex-col items-center gap-3 text-sm text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <p>Loading marketplace skills…</p>
+        </div>
+      ) : activeTab === 'my-skills' && filteredMySkills.length === 0 ? (
         <div className="mt-8 flex flex-col items-center gap-3 text-sm text-muted-foreground">
           <p>No skills yet. Complete a task in the sidepanel, then save it as a Skill.</p>
           <button
-            onClick={() => setActiveTab('marketplace')}
+            onClick={() => handleTabChange('marketplace')}
             className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
           >
             Browse Marketplace
           </button>
+        </div>
+      ) : activeTab === 'marketplace' && displaySkills.length === 0 ? (
+        <div className="mt-12 flex flex-col items-center gap-3 text-sm text-muted-foreground">
+          <p>No skills found. Try a different search or category.</p>
         </div>
       ) : (
         <>
@@ -307,7 +363,7 @@ export function SkillsPage() {
             ))}
           </div>
 
-          {activeTab === 'marketplace' && totalPages > 1 && (
+          {totalPages > 1 && (
             <div className="mt-6 flex flex-col items-center gap-2 pb-2">
               <div className="flex items-center gap-1">
                 <button
@@ -341,7 +397,10 @@ export function SkillsPage() {
                 </button>
               </div>
               <span className="text-xs text-muted-foreground">
-                Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} skills
+                {activeTab === 'marketplace'
+                  ? `Showing ${(page - 1) * PAGE_SIZE + 1}-${Math.min(page * PAGE_SIZE, marketplaceTotal)} of ${marketplaceTotal} skills`
+                  : `Showing ${(page - 1) * PAGE_SIZE + 1}-${Math.min(page * PAGE_SIZE, filteredMySkills.length)} of ${filteredMySkills.length} skills`
+                }
               </span>
             </div>
           )}
