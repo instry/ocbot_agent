@@ -11,6 +11,7 @@ export type AgentReplayStep =
   | { type: 'scroll'; direction: string; primitive?: boolean }
   | { type: 'wait'; primitive?: boolean }
   | { type: 'ariaTree' | 'think' | 'extract' | 'observe' }
+  | { type: 'skill'; skillId: string; parameterMap: Record<string, string>; primitive?: boolean }
 
 // --- Replay engine ---
 
@@ -45,6 +46,7 @@ function stepSummary(step: AgentReplayStep): string {
     case 'fillForm': return `fillForm(${step.fields.map(f => f.field).join(', ')})`
     case 'scroll': return `scroll(${step.direction})`
     case 'wait': return 'wait'
+    case 'skill': return `skill(${step.skillId})`
     default: return step.type
   }
 }
@@ -94,6 +96,12 @@ export async function replayAgentSteps(
           break
         case 'wait':
           result = await executeToolFn('waitForNavigation', '{}')
+          break
+        case 'skill':
+          result = await executeToolFn(
+            'skill',
+            JSON.stringify({ skillId: step.skillId, parameterMap: step.parameterMap }),
+          )
           break
         default:
           continue
@@ -231,6 +239,12 @@ export function toolCallToReplayStep(
       return { type: 'extract' }
     case 'observe':
       return { type: 'observe' }
+    case 'skill':
+      return {
+        type: 'skill',
+        skillId: (args.skillId as string) || '',
+        parameterMap: (args.parameterMap as Record<string, string>) || {},
+      }
     default:
       return null
   }

@@ -5,9 +5,11 @@ export { createSkillFromExecution, createSkillManual, createAutoSkill } from './
 export { matchSkill, matchAutoSkill } from './matcher'
 export { healStep, healSegment } from './heal'
 export { computeStepFragility } from './fragility'
+export { deriveUrlPattern, getUrlHierarchy, matchUrlPattern } from './urlPattern'
 export type {
   Skill,
   SkillParameter,
+  SkillPrecondition,
   SkillExecution,
   SkillRunResult,
   SkillRunCallbacks,

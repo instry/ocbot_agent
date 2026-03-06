@@ -12,6 +12,8 @@ import { healStep, healSegment } from './heal'
 import { getFragileStepIndices } from './fragility'
 import { logDebug } from '@/lib/debug/eventLog'
 
+const MAX_SKILL_DEPTH = 5
+
 /**
  * Replace `%paramName%` placeholders in a string with parameter values.
  */
@@ -19,6 +21,23 @@ function substituteParams(text: string, params: Record<string, string>): string 
   return text.replace(/%([a-zA-Z_][a-zA-Z0-9_]*)%/g, (match, key) => {
     return key in params ? params[key] : match
   })
+}
+
+/**
+ * Resolve a parameter map value: `%varName%` → lookup from variables/params, otherwise literal.
+ */
+function resolveParamValue(value: string, variables?: Variables): string {
+  if (!variables) return value
+  const match = value.match(/^%([a-zA-Z_][a-zA-Z0-9_]*)%$/)
+  if (match) {
+    const key = match[1]
+    if (key in variables) return variables[key]
+  }
+  // Support inline %param% replacement for mixed strings like "prefix_%var%_suffix"
+  if (value.includes('%')) {
+    return substituteParams(value, variables)
+  }
+  return value
 }
 
 /**
@@ -41,6 +60,13 @@ function substituteStepParams(
             ...f,
             value: substituteParams(f.value, params),
           })),
+        }
+      case 'skill':
+        return {
+          ...step,
+          parameterMap: Object.fromEntries(
+            Object.entries(step.parameterMap).map(([k, v]) => [k, substituteParams(v, params)])
+          ),
         }
       default:
         return step
@@ -67,8 +93,10 @@ export class SkillRunner {
     callbacks: SkillRunCallbacks,
     signal?: AbortSignal,
     variables?: Variables,
+    depth: number = 0,
+    skillCallStack: string[] = [],
   ): Promise<SkillRunResult> {
-    const result = await this.runFastTrack(skill, parameters, provider, cache, callbacks, signal, variables)
+    const result = await this.runFastTrack(skill, parameters, provider, cache, callbacks, signal, variables, depth, skillCallStack)
     await this.recordExecution(skill, parameters, result)
     return result
   }
@@ -86,6 +114,8 @@ export class SkillRunner {
     callbacks: SkillRunCallbacks,
     signal?: AbortSignal,
     variables?: Variables,
+    depth: number = 0,
+    skillCallStack: string[] = [],
   ): Promise<SkillRunResult> {
     const startTime = Date.now()
 
@@ -94,7 +124,7 @@ export class SkillRunner {
     // --- Fast Track ---
     if (skill.steps.length > 0) {
       logDebug('execution', 'Track: fast')
-      result = await this.runFastTrack(skill, parameters, provider, cache, callbacks, signal, variables)
+      result = await this.runFastTrack(skill, parameters, provider, cache, callbacks, signal, variables, depth, skillCallStack)
 
       if (result.success) {
         await this.recordExecution(skill, parameters, result)
@@ -130,6 +160,8 @@ export class SkillRunner {
     callbacks: SkillRunCallbacks,
     signal?: AbortSignal,
     variables?: Variables,
+    depth: number = 0,
+    skillCallStack: string[] = [],
   ): Promise<SkillRunResult> {
     const startTime = Date.now()
     const steps = substituteStepParams(skill.steps, parameters)
@@ -137,8 +169,14 @@ export class SkillRunner {
     // Dynamic import to avoid circular dependency
     const { executeTool } = await import('@/lib/agent/tools')
 
-    const executeForReplay = (name: string, argsJson: string) =>
-      executeTool(name, argsJson, provider, cache, signal, variables, { skillReplay: true })
+    const executeForReplay = (name: string, argsJson: string) => {
+      if (name === 'skill') {
+        return this.executeSubSkill(
+          argsJson, provider, cache, callbacks, signal, variables, depth, skillCallStack,
+        )
+      }
+      return executeTool(name, argsJson, provider, cache, signal, variables, { skillReplay: true })
+    }
 
     const replayCallbacks: ReplayCallbacks = {
       onStepStart: (i, step) => callbacks.onStepStart(i, step),
@@ -149,32 +187,6 @@ export class SkillRunner {
     // L2 heal function: re-infer a single failed step via LLM
     const healFn = async (failedStep: AgentReplayStep, _stepIndex: number) => {
       return healStep(failedStep, provider)
-    }
-
-    // Fragile step precheck: verify known-fragile act steps before replay
-    if (skill.fragileSteps?.length) {
-      const { findByXPath } = await import('@/lib/agent/act')
-      const { ensureAttached } = await import('@/lib/agent/cdp')
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-      if (tab?.id) {
-        await ensureAttached(tab.id)
-        for (const idx of skill.fragileSteps) {
-          const step = steps[idx]
-          if (step?.type !== 'act' || !step.actions?.length) continue
-          const allResolvable = (await Promise.all(
-            step.actions.map(async (a) => {
-              if (!a.xpath) return false
-              const nodeId = await findByXPath(tab.id!, a.xpath)
-              return nodeId !== null
-            }),
-          )).every(Boolean)
-          if (!allResolvable) {
-            logDebug('fragile-precheck', 'Pre-checking fragile step', { stepIndex: idx })
-            const healed = await healFn(step, idx)
-            if (healed) steps[idx] = healed
-          }
-        }
-      }
     }
 
     const replayResult = await replayAgentSteps(steps, executeForReplay, replayCallbacks, signal, healFn)
@@ -310,6 +322,67 @@ export class SkillRunner {
       totalSteps: 0,
       durationMs: Date.now() - startTime,
     }
+  }
+
+  /**
+   * Execute a sub-skill referenced by a 'skill' step.
+   * Handles depth limiting, circular dependency detection, parameter mapping, and recursive execution.
+   */
+  private async executeSubSkill(
+    argsJson: string,
+    provider: LlmProvider,
+    cache: ActCache,
+    callbacks: SkillRunCallbacks,
+    signal?: AbortSignal,
+    variables?: Variables,
+    depth: number = 0,
+    skillCallStack: string[] = [],
+  ): Promise<string> {
+    const { skillId, parameterMap } = JSON.parse(argsJson) as {
+      skillId: string
+      parameterMap: Record<string, string>
+    }
+    const nextDepth = depth + 1
+
+    // Depth check
+    if (nextDepth > MAX_SKILL_DEPTH) {
+      return JSON.stringify({ success: false, error: `Skill nesting too deep (max ${MAX_SKILL_DEPTH})` })
+    }
+
+    // Circular dependency check
+    if (skillCallStack.includes(skillId)) {
+      return JSON.stringify({
+        success: false,
+        error: `Circular skill dependency: ${[...skillCallStack, skillId].join(' → ')}`,
+      })
+    }
+
+    // Load child skill
+    const childSkill = await this.store.get(skillId)
+    if (!childSkill) {
+      return JSON.stringify({ success: false, error: `Skill not found: ${skillId}` })
+    }
+
+    // Map parameters from parent to child
+    const childParams: Record<string, string> = {}
+    for (const [childKey, parentRef] of Object.entries(parameterMap)) {
+      childParams[childKey] = resolveParamValue(parentRef, variables)
+    }
+
+    // Recursive execute
+    const runner = new SkillRunner(this.store)
+    const result = await runner.execute(
+      childSkill, childParams, provider, cache, callbacks,
+      signal, variables, nextDepth, [...skillCallStack, skillId],
+    )
+
+    return JSON.stringify({
+      success: result.success,
+      track: result.track,
+      durationMs: result.durationMs,
+      completedSteps: result.completedSteps,
+      totalSteps: result.totalSteps,
+    })
   }
 
   /**

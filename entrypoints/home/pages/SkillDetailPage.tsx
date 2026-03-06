@@ -319,6 +319,7 @@ export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplac
         description: realSkill.description,
         categories: JSON.stringify(realSkill.categories),
         data: JSON.stringify(realSkill),
+        url_pattern: realSkill.urlPattern || '*',
         version: realSkill.version,
       })
 

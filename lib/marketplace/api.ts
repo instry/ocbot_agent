@@ -11,6 +11,7 @@ export interface MarketplaceSkill {
   description: string
   categories: string  // JSON array string
   data: string        // full Skill JSON blob
+  url_pattern: string // URL scope pattern
   clone_count: number
   version: number
   created_at: number
@@ -24,6 +25,7 @@ export interface PublishPayload {
   description: string
   categories: string
   data: string
+  url_pattern: string
   version: number
 }
 
@@ -88,4 +90,20 @@ export async function cloneSkill(publishedId: string): Promise<void> {
   if (!res.ok) {
     throw new Error(`Failed to clone skill: ${res.status}`)
   }
+}
+
+/** Discover marketplace skills by URL (hierarchy prefix match on server). */
+export async function discoverSkills(params: {
+  url: string
+  instruction?: string
+  limit?: number
+}): Promise<{ skills: MarketplaceSkill[]; total: number }> {
+  const searchParams = new URLSearchParams()
+  searchParams.set('url', params.url)
+  if (params.instruction) searchParams.set('q', params.instruction)
+  if (params.limit) searchParams.set('limit', String(params.limit))
+
+  const res = await fetch(`${API_BASE}/api/marketplace/discover?${searchParams}`)
+  if (!res.ok) throw new Error(`Discover failed: ${res.status}`)
+  return res.json()
 }

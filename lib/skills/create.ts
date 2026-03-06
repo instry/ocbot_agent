@@ -1,8 +1,9 @@
 // lib/skills/create.ts — Skill creation from agent execution or manual input
 import type { AgentReplayStep } from '@/lib/agent/agentCache'
 import type { LlmProvider, LlmRequestMessage } from '@/lib/llm/types'
-import type { Skill, SkillParameter } from './types'
+import type { Skill, SkillParameter, SkillPrecondition } from './types'
 import { streamChat } from '@/lib/llm/client'
+import { deriveUrlPattern } from './urlPattern'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -89,8 +90,10 @@ export interface ParsedSkillMd {
   description: string
   triggerPhrases: string[]
   startUrl: string
+  urlPattern: string
   categories: string[]
   parameters: SkillParameter[]
+  preconditions: SkillPrecondition[]
   body: string          // markdown body after frontmatter
   raw: string           // full original text (frontmatter + body)
 }
@@ -108,13 +111,15 @@ export function parseSkillMd(raw: string): ParsedSkillMd | null {
   const fmText = fmMatch[1]
   const body = raw.slice(fmMatch[0].length).trim()
 
-  // Simple YAML parser — handles scalars, arrays, and nested object arrays (parameters)
+  // Simple YAML parser — handles scalars, arrays, and nested object arrays (parameters, preconditions)
   let name = ''
   let description = ''
   let startUrl = ''
+  let urlPattern = ''
   const triggerPhrases: string[] = []
   const categories: string[] = []
   const parameters: SkillParameter[] = []
+  const preconditions: SkillPrecondition[] = []
 
   const lines = fmText.split('\n')
   let i = 0
@@ -131,6 +136,7 @@ export function parseSkillMd(raw: string): ParsedSkillMd | null {
         case 'name': name = unquoted; break
         case 'description': description = unquoted; break
         case 'startUrl': startUrl = unquoted; break
+        case 'urlPattern': urlPattern = unquoted; break
       }
       i++
       continue
@@ -179,6 +185,41 @@ export function parseSkillMd(raw: string): ParsedSkillMd | null {
             })
           }
         }
+      } else if (key === 'preconditions') {
+        // Parse nested object array: each item starts with "  - type: ..."
+        while (i < lines.length && /^\s+-\s/.test(lines[i])) {
+          const pc: Partial<SkillPrecondition> = {}
+          const firstLine = lines[i].match(/^\s+-\s+(\w+):\s+(.+)$/)
+          if (firstLine) {
+            const pKey = firstLine[1]
+            const pVal = firstLine[2].replace(/^["']|["']$/g, '')
+            if (pKey === 'type') pc.type = pVal as SkillPrecondition['type']
+            else if (pKey === 'selector') pc.selector = pVal
+            else if (pKey === 'value') pc.value = pVal
+            else if (pKey === 'description') pc.description = pVal
+          }
+          i++
+          while (i < lines.length && /^\s{4,}\w+:/.test(lines[i]) && !/^\s+-/.test(lines[i])) {
+            const contMatch = lines[i].match(/^\s+(\w+):\s+(.+)$/)
+            if (contMatch) {
+              const pKey = contMatch[1]
+              const pVal = contMatch[2].replace(/^["']|["']$/g, '')
+              if (pKey === 'type') pc.type = pVal as SkillPrecondition['type']
+              else if (pKey === 'selector') pc.selector = pVal
+              else if (pKey === 'value') pc.value = pVal
+              else if (pKey === 'description') pc.description = pVal
+            }
+            i++
+          }
+          if (pc.type && pc.description) {
+            preconditions.push({
+              type: pc.type,
+              selector: pc.selector,
+              value: pc.value,
+              description: pc.description,
+            })
+          }
+        }
       } else {
         // Simple array: "  - value"
         while (i < lines.length && /^\s+-\s/.test(lines[i])) {
@@ -204,8 +245,10 @@ export function parseSkillMd(raw: string): ParsedSkillMd | null {
     description,
     triggerPhrases,
     startUrl,
+    urlPattern,
     categories,
     parameters,
+    preconditions,
     body,
     raw,
   }
@@ -275,6 +318,7 @@ triggerPhrases:
   - "<phrase>"
 ...
 startUrl: "${startUrl}"
+urlPattern: <URL scope for this skill. Examples: "*" if the skill works on any website, "taobao.com" if it works on any Taobao page, "trade.taobao.com/order" if it only works on order pages. Choose the most general level that still makes sense.>
 categories:
   - <category>
 parameters:
@@ -282,6 +326,11 @@ parameters:
     type: string|number|boolean|select
     description: "<description>"
     required: true|false
+preconditions:
+  - type: element_visible|url_contains|page_title_contains
+    selector: "<CSS selector, for element_visible>"
+    value: "<substring, for url_contains/page_title_contains>"
+    description: "<human-readable description>"
 ---
 
 # <Skill Title>
@@ -319,6 +368,8 @@ function buildFallbackSkill(
     categories: [],
     parameters: [],
     triggerPhrases: [],
+    urlPattern: deriveUrlPattern(startUrl),
+    preconditions: [],
     author: 'agent',
     createdAt: now,
     updatedAt: now,
@@ -370,6 +421,8 @@ export async function createSkillFromExecution(
         name: parsed.name || deriveNameFromInstruction(instruction),
         description: parsed.description || instruction,
         triggerPhrases: parsed.triggerPhrases || [],
+        urlPattern: parsed.urlPattern || deriveUrlPattern(parsed.startUrl || startUrl),
+        preconditions: parsed.preconditions || [],
         version: 1,
         categories: parsed.categories || [],
         parameters: parsed.parameters || [],
@@ -379,6 +432,7 @@ export async function createSkillFromExecution(
         skillMd: parsed.raw,
         steps: markPrimitiveSteps(steps),
         startUrl: parsed.startUrl || startUrl,
+        score: 1,
         status: 'active',
         totalRuns: 1,
         successCount: 1,
@@ -416,6 +470,8 @@ export function createSkillManual(
     categories: [],
     parameters: [],
     triggerPhrases: [],
+    urlPattern: deriveUrlPattern(startUrl),
+    preconditions: [],
     author: 'user',
     createdAt: now,
     updatedAt: now,
@@ -456,10 +512,12 @@ export function createAutoSkill(
     categories: [],
     parameters: [],
     triggerPhrases: [],
+    urlPattern: deriveUrlPattern(startUrl),
+    preconditions: [],
     author: 'agent',
     createdAt: now,
     updatedAt: now,
-    skillMd: `---\nname: ${instruction.slice(0, 60)}\ndescription: ${instruction}\nstartUrl: "${startUrl}"\n---\n\n# Auto-skill\n\n## Workflow\n1. ${instruction}\n`,
+    skillMd: `---\nname: ${instruction.slice(0, 60)}\ndescription: ${instruction}\nstartUrl: "${startUrl}"\nurlPattern: "${deriveUrlPattern(startUrl)}"\n---\n\n# Auto-skill\n\n## Workflow\n1. ${instruction}\n`,
     steps: markPrimitiveSteps(steps),
     startUrl,
     score: 1,

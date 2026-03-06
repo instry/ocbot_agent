@@ -1,6 +1,7 @@
 // lib/skills/store.ts
 import type { Skill, SkillExecution } from './types'
 import { markDirty, markDeleted } from '../sync/skillSync'
+import { deriveUrlPattern, getUrlHierarchy, matchUrlPattern } from './urlPattern'
 
 const SKILLS_KEY = 'ocbot_skills'
 const EXECUTIONS_KEY = 'ocbot_skill_executions'
@@ -12,6 +13,7 @@ export class SkillStore {
   // === Internal storage access ===
 
   private backfilled = false
+  private urlPatternBackfilled = false
 
   private async getAll(): Promise<Record<string, Skill>> {
     const result = await chrome.storage.local.get(SKILLS_KEY)
@@ -38,6 +40,10 @@ export class SkillStore {
     if (!this.backfilled) {
       this.backfilled = true
       await this.backfillTriggerPhrases()
+    }
+    if (!this.urlPatternBackfilled) {
+      this.urlPatternBackfilled = true
+      await this.backfillUrlPatterns()
     }
     const all = await this.getAll()
     return Object.values(all).sort((a, b) => b.updatedAt - a.updatedAt)
@@ -145,6 +151,34 @@ export class SkillStore {
     }
     if (count > 0) await this.setAll(all)
     return count
+  }
+
+  /** Backfill urlPattern for existing skills that lack it (derived from startUrl). */
+  async backfillUrlPatterns(): Promise<number> {
+    const all = await this.getAll()
+    let count = 0
+    for (const skill of Object.values(all)) {
+      if (skill.urlPattern) continue
+      skill.urlPattern = deriveUrlPattern(skill.startUrl)
+      skill.preconditions = skill.preconditions || []
+      all[skill.id] = skill
+      count++
+    }
+    if (count > 0) await this.setAll(all)
+    return count
+  }
+
+  /** List skills that match the given URL, sorted by specificity (most specific first). */
+  async listByUrl(currentUrl: string): Promise<Skill[]> {
+    const hierarchy = getUrlHierarchy(currentUrl)
+    const all = await this.getAll()
+    return Object.values(all)
+      .filter(s => matchUrlPattern(s.urlPattern || deriveUrlPattern(s.startUrl), hierarchy) >= 0)
+      .sort((a, b) => {
+        const da = matchUrlPattern(a.urlPattern || deriveUrlPattern(a.startUrl), hierarchy)
+        const db = matchUrlPattern(b.urlPattern || deriveUrlPattern(b.startUrl), hierarchy)
+        return db - da
+      })
   }
 
   // === Execution history ===

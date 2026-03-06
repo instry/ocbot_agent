@@ -1,6 +1,13 @@
 // lib/skills/types.ts
 import type { AgentReplayStep, HealEvent } from '@/lib/agent/agentCache'
 
+export interface SkillPrecondition {
+  type: 'element_visible' | 'url_contains' | 'page_title_contains'
+  selector?: string       // CSS selector (for element_visible)
+  value?: string          // substring (for url_contains / page_title_contains)
+  description: string     // human-readable description
+}
+
 export interface SkillParameter {
   name: string
   type: 'string' | 'number' | 'boolean' | 'select'
@@ -18,6 +25,8 @@ export interface Skill {
   categories: string[]
   parameters: SkillParameter[]
   triggerPhrases: string[]           // 3-5 trigger phrases for fast text matching
+  urlPattern: string                 // URL scope: '*', 'taobao.com', 'taobao.com/order', etc.
+  preconditions: SkillPrecondition[] // execution preconditions (default: [])
 
   author: string
   sourceSkillId?: string
@@ -77,4 +86,5 @@ export interface SkillRunResult {
 export interface SkillMatch {
   skill: Skill
   confidence: 'strong' | 'weak'
+  matchDepth: number                 // 0 = universal '*', higher = more specific
 }
