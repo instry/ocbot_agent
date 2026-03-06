@@ -17,6 +17,7 @@ export interface Skill {
   version: number
   categories: string[]
   parameters: SkillParameter[]
+  triggerPhrases: string[]           // 3-5 trigger phrases for fast text matching
 
   author: string
   sourceSkillId?: string
@@ -52,6 +53,7 @@ export interface SkillExecution {
   url: string
   parameters: Record<string, string>
   durationMs: number
+  primitiveRatio?: number   // primitive steps / total steps (0-1)
 }
 
 export interface SkillRunCallbacks {

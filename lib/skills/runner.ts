@@ -334,6 +334,8 @@ export class SkillRunner {
     result: SkillRunResult,
   ): Promise<void> {
     // Build execution record
+    const primitiveCount = skill.steps.filter(s => 'primitive' in s && s.primitive).length
+    const primitiveRatio = skill.steps.length > 0 ? primitiveCount / skill.steps.length : 0
     const execution: SkillExecution = {
       id: `exec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       skillId: skill.id,
@@ -347,6 +349,7 @@ export class SkillRunner {
       url: skill.startUrl,
       parameters,
       durationMs: result.durationMs,
+      primitiveRatio,
     }
 
     await this.store.addExecution(execution)

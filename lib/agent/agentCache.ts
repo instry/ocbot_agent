@@ -5,11 +5,11 @@ import { logDebug } from '@/lib/debug/eventLog'
 // --- Types ---
 
 export type AgentReplayStep =
-  | { type: 'act'; instruction: string; actions: ActionStep[] }
-  | { type: 'fillForm'; fields: FormField[]; actions: ActionStep[] }
-  | { type: 'navigate'; url: string }
-  | { type: 'scroll'; direction: string }
-  | { type: 'wait' }
+  | { type: 'act'; instruction: string; actions: ActionStep[]; primitive?: boolean }
+  | { type: 'fillForm'; fields: FormField[]; actions: ActionStep[]; primitive?: boolean }
+  | { type: 'navigate'; url: string; primitive?: boolean }
+  | { type: 'scroll'; direction: string; primitive?: boolean }
+  | { type: 'wait'; primitive?: boolean }
   | { type: 'ariaTree' | 'think' | 'extract' | 'observe' }
 
 // --- Replay engine ---
@@ -103,8 +103,8 @@ export async function replayAgentSteps(
       const parsed = tryParseJson(result)
       if (parsed && parsed.success === false) {
         console.log(`${TAG} [${i + 1}/${steps.length}] ❌ failed (${Date.now() - stepStart}ms)`)
-        // L2 heal: try healFn before giving up
-        if (healFn) {
+        // L2 heal: try healFn before giving up (skip for primitive steps — they are deterministic)
+        if (healFn && !step.primitive) {
           logDebug('L2', 'Attempting L2 heal', { stepIndex: i, stepType: step.type })
           const healStart = Date.now()
           const healed = await healFn(step, i)
@@ -159,8 +159,8 @@ export async function replayAgentSteps(
       callbacks.onStepEnd(i, step, result)
     } catch (err: unknown) {
       console.log(`${TAG} [${i + 1}/${steps.length}] ❌ exception: ${err instanceof Error ? err.message : String(err)}`)
-      // L2 heal on exception too
-      if (healFn) {
+      // L2 heal on exception too (skip for primitive steps — they are deterministic)
+      if (healFn && !step.primitive) {
         const healStart = Date.now()
         const healed = await healFn(step, i)
         if (healed) {
