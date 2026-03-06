@@ -211,6 +211,162 @@ function RenderedMarkdown({ text }: { text: string }) {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Structured skill markdown parser
+// ---------------------------------------------------------------------------
+
+interface SkillMdSections {
+  workflow: string[]
+  preconditions: string[]
+  notes: string[]
+  other: string
+}
+
+function parseSkillMd(raw: string): SkillMdSections | null {
+  if (!raw) return null
+
+  const text = normaliseMd(raw)
+
+  // Check for YAML frontmatter — if none, return null to fall back to plain rendering
+  if (!text.trimStart().startsWith('---')) return null
+
+  // Strip YAML frontmatter
+  const fmEnd = text.indexOf('---', text.indexOf('---') + 3)
+  let body = fmEnd !== -1 ? text.slice(fmEnd + 3).trim() : text.trim()
+
+  // Strip h1 title (already shown in header)
+  body = body.replace(/^#\s+.*$/m, '').trim()
+
+  const workflow: string[] = []
+  const preconditions: string[] = []
+  const notes: string[] = []
+  const otherLines: string[] = []
+
+  // Split into sections by ## headings
+  const sections: { heading: string; content: string }[] = []
+  const sectionRegex = /^##\s+(.+)$/gm
+  let match: RegExpExecArray | null
+  const headings: { name: string; start: number; end: number }[] = []
+
+  while ((match = sectionRegex.exec(body)) !== null) {
+    headings.push({ name: match[1].trim(), start: match.index, end: match.index + match[0].length })
+  }
+
+  for (let i = 0; i < headings.length; i++) {
+    const contentStart = headings[i].end
+    const contentEnd = i + 1 < headings.length ? headings[i + 1].start : body.length
+    sections.push({ heading: headings[i].name, content: body.slice(contentStart, contentEnd).trim() })
+  }
+
+  // Content before first ## heading goes to other
+  if (headings.length > 0 && headings[0].start > 0) {
+    const pre = body.slice(0, headings[0].start).trim()
+    if (pre) otherLines.push(pre)
+  } else if (headings.length === 0) {
+    // No sections at all
+    otherLines.push(body)
+  }
+
+  function extractListItems(content: string): string[] {
+    return content
+      .split('\n')
+      .map(l => l.replace(/^\s*(?:[-*+]|\d+[.)]) \s*/, '').replace(/^\s*[-*+]\s+/, '').replace(/^\s*\d+[.)]\s+/, '').trim())
+      .filter(l => l.length > 0)
+  }
+
+  for (const sec of sections) {
+    const lower = sec.heading.toLowerCase()
+    if (lower === 'workflow' || lower === 'steps') {
+      workflow.push(...extractListItems(sec.content))
+    } else if (lower === 'preconditions' || lower === 'prerequisites') {
+      preconditions.push(...extractListItems(sec.content))
+    } else if (lower === 'notes' || lower === 'note') {
+      notes.push(...extractListItems(sec.content))
+    } else {
+      otherLines.push(`## ${sec.heading}\n${sec.content}`)
+    }
+  }
+
+  return {
+    workflow,
+    preconditions,
+    notes,
+    other: otherLines.join('\n\n').trim(),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Structured About component
+// ---------------------------------------------------------------------------
+
+function StructuredAbout({ detail }: { detail: SkillDetail }) {
+  const text = detail.longDescription || detail.description || ''
+  const sections = useMemo(() => parseSkillMd(text), [text])
+
+  // Fallback: no frontmatter or empty — render as plain markdown
+  if (!sections) {
+    return <RenderedMarkdown text={text} />
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Workflow timeline */}
+      {sections.workflow.length > 0 && (
+        <div>
+          <h3 className="mb-3 text-sm font-semibold text-foreground">Workflow</h3>
+          <div className="relative ml-1 flex flex-col gap-0">
+            {/* Vertical line */}
+            <div className="absolute left-3 top-3 bottom-3 w-px bg-border/60" />
+            {sections.workflow.map((step, i) => (
+              <div key={i} className="relative flex items-start gap-3 py-1.5">
+                <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
+                  {i + 1}
+                </div>
+                <span className="pt-0.5 text-sm leading-relaxed text-muted-foreground">
+                  <InlineText text={step} />
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Preconditions callout */}
+      {sections.preconditions.length > 0 && (
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3">
+          <h3 className="mb-2 text-sm font-semibold text-blue-400">Preconditions</h3>
+          <ul className="flex flex-col gap-1">
+            {sections.preconditions.map((item, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400/60" />
+                <InlineText text={item} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Notes callout */}
+      {sections.notes.length > 0 && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+          <h3 className="mb-2 text-sm font-semibold text-amber-400">Notes</h3>
+          <ul className="flex flex-col gap-1">
+            {sections.notes.map((item, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400/60" />
+                <InlineText text={item} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Remaining content */}
+      {sections.other && <RenderedMarkdown text={sections.other} />}
+    </div>
+  )
+}
+
 function DetailIcon({ detail, className = 'h-16 w-16' }: { detail: SkillDetail; className?: string }) {
   if (detail.iconUrl) {
     return <img src={detail.iconUrl} alt={detail.name} className={`${className} rounded-2xl object-cover`} />
@@ -519,7 +675,7 @@ export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplac
         {/* About */}
         <section>
           <h2 className="mb-3 text-lg font-semibold text-foreground">About</h2>
-          <RenderedMarkdown text={detail.longDescription} />
+          <StructuredAbout detail={detail} />
         </section>
 
         {/* Parameters */}
