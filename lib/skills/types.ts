@@ -71,6 +71,11 @@ export interface SkillRunCallbacks {
   onTrackSwitch: (from: 'fast' | 'agent', to: 'fast' | 'agent') => void
   onHeal: (event: HealEvent) => void
   onTextDelta: (text: string) => void
+  // Agent-track callbacks (forwarded to UI when agent track runs)
+  onToolCallStart?: (id: string, name: string, args?: string) => void
+  onToolCallEnd?: (id: string, name: string, result: string) => void
+  onAssistantMessage?: (content: string, toolCalls: { id: string; name: string; arguments: string }[]) => void
+  onToolMessage?: (toolCallId: string, name: string, result: string) => void
 }
 
 export interface SkillRunResult {
@@ -81,6 +86,7 @@ export interface SkillRunResult {
   totalSteps: number
   durationMs: number
   updatedSteps?: AgentReplayStep[]
+  executedSteps?: AgentReplayStep[]  // steps actually executed (for agent-track fallback context)
 }
 
 export interface SkillMatch {

@@ -74,6 +74,21 @@ function substituteStepParams(
   })
 }
 
+/**
+ * Produce a human-readable one-liner for a replay step (used in agent-track fallback context).
+ */
+function describeStep(step: AgentReplayStep): string {
+  switch (step.type) {
+    case 'navigate': return `Navigate to ${step.url}`
+    case 'act': return `Act: "${step.instruction}"`
+    case 'scroll': return `Scroll ${step.direction ?? 'down'}`
+    case 'wait': return 'Wait for page load'
+    case 'fillForm': return `Fill form (${step.fields.length} field${step.fields.length === 1 ? '' : 's'})`
+    case 'skill': return `Run sub-skill ${step.skillId}`
+    default: return step.type
+  }
+}
+
 export class SkillRunner {
   private store: SkillStore
 
@@ -133,7 +148,17 @@ export class SkillRunner {
 
       // Fast track failed — switch to agent track
       callbacks.onTrackSwitch('fast', 'agent')
-      const agentResult = await this.runAgentTrack(skill, parameters, provider, cache, callbacks, signal, variables)
+
+      // Build progress context from executed steps so agent track can continue
+      let completedContext: string | undefined
+      if (result.executedSteps?.length) {
+        const descs = result.executedSteps
+          .map((s, i) => `${i + 1}. ${describeStep(s)}`)
+          .join('\n')
+        completedContext = `The following steps were already completed:\n${descs}`
+      }
+
+      const agentResult = await this.runAgentTrack(skill, parameters, provider, cache, callbacks, signal, variables, completedContext)
       // Mark as hybrid since we attempted fast first
       agentResult.track = 'hybrid'
       agentResult.durationMs = Date.now() - startTime
@@ -236,9 +261,23 @@ export class SkillRunner {
           await this.evolveSkill(skill, mergedSteps)
           return result
         }
+
+        // L3 also failed — return with accurate completed count including L3 progress
+        return {
+          success: false,
+          track: 'fast' as const,
+          healEvents: [...replayResult.healEvents, ...l3ReplayResult.healEvents],
+          completedSteps: replayResult.failedIndex + (l3ReplayResult.failedIndex ?? 0),
+          totalSteps: steps.length,
+          durationMs: Date.now() - startTime,
+          executedSteps: [
+            ...steps.slice(0, replayResult.failedIndex),
+            ...l3Steps.slice(0, l3ReplayResult.failedIndex ?? 0),
+          ],
+        }
       }
 
-      // L3 also failed — return original failure
+      // L3 not attempted (no l3Steps) — return original failure
       return {
         success: false,
         track: 'fast' as const,
@@ -246,6 +285,7 @@ export class SkillRunner {
         completedSteps: replayResult.failedIndex,
         totalSteps: steps.length,
         durationMs: Date.now() - startTime,
+        executedSteps: steps.slice(0, replayResult.failedIndex),
       }
     }
 
@@ -278,6 +318,7 @@ export class SkillRunner {
     callbacks: SkillRunCallbacks,
     signal?: AbortSignal,
     variables?: Variables,
+    completedContext?: string,
   ): Promise<SkillRunResult> {
     const startTime = Date.now()
 
@@ -293,6 +334,18 @@ export class SkillRunner {
       prompt += `\n\nParameters:\n${paramBlock}`
     }
 
+    // If we have partial-progress context from fast track, replace prompt with a focused continuation
+    if (completedContext) {
+      prompt = `IMPORTANT: This task was partially completed by automated replay. The browser is already at an intermediate page. Do NOT restart from the beginning — continue from the current page state.\n\nTask: ${skill.name} — ${skill.description}\n\n${completedContext}\n\nContinue from where the replay left off. Look at the current page and perform the remaining action(s).`
+      // Re-append parameters if any
+      if (paramEntries.length > 0) {
+        const paramBlock = paramEntries
+          .map(([k, v]) => `- ${k}: ${v}`)
+          .join('\n')
+        prompt += `\n\nParameters:\n${paramBlock}`
+      }
+    }
+
     const messages: LlmRequestMessage[] = [
       { role: 'user', content: prompt },
     ]
@@ -300,10 +353,10 @@ export class SkillRunner {
     // Bridge SkillRunCallbacks to AgentCallbacks
     const agentCallbacks: AgentCallbacks = {
       onTextDelta: (text) => callbacks.onTextDelta(text),
-      onToolCallStart: () => { /* not surfaced in skill callbacks */ },
-      onToolCallEnd: () => { /* not surfaced in skill callbacks */ },
-      onAssistantMessage: () => { /* not surfaced in skill callbacks */ },
-      onToolMessage: () => { /* not surfaced in skill callbacks */ },
+      onToolCallStart: (id, name, args) => callbacks.onToolCallStart?.(id, name, args),
+      onToolCallEnd: (id, name, result) => callbacks.onToolCallEnd?.(id, name, result),
+      onAssistantMessage: (content, toolCalls) => callbacks.onAssistantMessage?.(content, toolCalls),
+      onToolMessage: (toolCallId, name, result) => callbacks.onToolMessage?.(toolCallId, name, result),
       onError: () => { /* errors handled via result */ },
     }
 

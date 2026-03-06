@@ -332,11 +332,87 @@ export function useChat(provider: LlmProvider | null) {
               prev.map(ts => ts.id === id ? { ...ts, status: 'done' as const, result: res, description } : ts)
             )
           },
-          onTrackSwitch: () => {},
+          onTrackSwitch: () => {
+            // Clear fast-track tool statuses so agent-track starts fresh
+            setToolStatuses([])
+          },
           onHeal: () => {},
           onTextDelta: (text) => {
             currentText += text
             setStreamingText(currentText)
+          },
+          onToolCallStart: (id, name, args) => {
+            let description: string | undefined
+            if (args) {
+              try {
+                const parsed = JSON.parse(args)
+                if (name === 'act') {
+                  description = parsed.instruction || (parsed.method ? `${parsed.method} element` : undefined)
+                } else if (name === 'navigate') {
+                  const url = parsed.url || ''
+                  description = url.length > 50 ? url.slice(0, 50) + '…' : url
+                } else if (name === 'extract' || name === 'observe') {
+                  description = parsed.instruction
+                } else if (name === 'scroll') {
+                  description = parsed.direction || 'down'
+                } else if (name === 'think') {
+                  description = parsed.thought?.slice(0, 60)
+                } else if (name === 'fillForm') {
+                  description = (parsed.fields || []).map((f: { field: string }) => f.field).join(', ')
+                }
+              } catch { /* ignore */ }
+            }
+            setToolStatuses(prev => {
+              const exists = prev.find(ts => ts.id === id)
+              if (exists) {
+                return prev.map(ts => ts.id === id ? { ...ts, description } : ts)
+              }
+              return [...prev, { id, name, status: 'running', description }]
+            })
+          },
+          onToolCallEnd: (id, _name, result) => {
+            let description: string | undefined
+            try {
+              const parsed = JSON.parse(result)
+              description = parsed.description
+            } catch { /* ignore */ }
+            setToolStatuses(prev =>
+              prev.map(ts => ts.id === id ? {
+                ...ts,
+                status: 'done' as const,
+                result,
+                description: description || ts.description,
+              } : ts)
+            )
+          },
+          onAssistantMessage: (content, toolCalls) => {
+            if (content || toolCalls.length > 0) {
+              const assistantMsg: ChatMessage = {
+                id: `msg_${Date.now()}_assistant`,
+                role: 'assistant',
+                content: content || '',
+                createdAt: Date.now(),
+                toolCalls: toolCalls.length > 0 ? toolCalls.map(tc => ({
+                  id: tc.id,
+                  name: tc.name,
+                  arguments: tc.arguments,
+                })) : undefined,
+              }
+              setMessages(prev => [...prev, assistantMsg])
+              currentText = ''
+              setStreamingText('')
+            }
+          },
+          onToolMessage: (toolCallId, name, result) => {
+            const safeResult = (result ?? '').slice(0, 500)
+            const toolMsg: ChatMessage = {
+              id: `msg_${Date.now()}_tool_${toolCallId}`,
+              role: 'tool',
+              content: safeResult,
+              createdAt: Date.now(),
+              toolResult: { toolCallId, name, result: safeResult },
+            }
+            setMessages(prev => [...prev, toolMsg])
           },
         },
         abortController.signal,
