@@ -1,5 +1,6 @@
 import { initFromStorage, startChannel, stopChannel, getAllStatuses } from '../../lib/channels/manager'
 import { supabase } from '../../lib/auth/supabase'
+import { syncSkills } from '../../lib/sync/skillSync'
 import type { ChannelConfig } from '../../lib/channels/types'
 
 export default defineBackground(() => {
@@ -14,6 +15,24 @@ export default defineBackground(() => {
   // Restore auth session on service worker wake (ensures token refresh)
   supabase.auth.getSession().catch(err => {
     console.error('[ocbot] Failed to restore auth session:', err)
+  })
+
+  // Periodic skill sync via alarms
+  chrome.alarms.create('skill-sync', { periodInMinutes: 5 })
+
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'skill-sync') {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) syncSkills()
+      }).catch(() => {})
+    }
+  })
+
+  // Sync skills on sign-in
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_IN') {
+      syncSkills()
+    }
   })
 
   // Handle messages from sidepanel
@@ -47,6 +66,13 @@ export default defineBackground(() => {
           : chrome.windows.getLastFocused().then(w => w.id)
         windowIdPromise
           .then(windowId => chrome.sidePanel.open({ windowId }))
+          .then(() => sendResponse({ ok: true }))
+          .catch(err => sendResponse({ ok: false, error: String(err) }))
+        return true
+      }
+
+      case 'syncSkills': {
+        syncSkills()
           .then(() => sendResponse({ ok: true }))
           .catch(err => sendResponse({ ok: false, error: String(err) }))
         return true

@@ -30,7 +30,8 @@ export default defineConfig({
       'activeTab',
       'scripting',
       'debugger',
-      'identity'
+      'identity',
+      'alarms'
     ],
     host_permissions: [
       '<all_urls>',

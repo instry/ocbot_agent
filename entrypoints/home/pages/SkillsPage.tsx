@@ -1,8 +1,10 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { Search, ChevronLeft, ChevronRight, BadgeCheck, GitFork, Loader2 } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, BadgeCheck, GitFork, Loader2, Cloud, CloudOff, RefreshCw } from 'lucide-react'
 import { MOCK_SKILLS, getSkillAbbr, getLocalSkills, getLocalSkillDetail, deleteLocalSkill, type Skill } from '../data/skills'
 import { SkillDetailPage } from './SkillDetailPage'
 import { SkillEditPage } from './SkillEditPage'
+import { useAuth } from '@/lib/hooks/useAuth'
+import { useSkillSync } from '@/lib/hooks/useSkillSync'
 
 const CATEGORIES = [
   'All',
@@ -108,7 +110,8 @@ export function SkillsPage() {
   const PAGE_SIZE = 30
 
   const [mySkills, setMySkills] = useState<Skill[]>([])
-
+  const { isAuthenticated } = useAuth()
+  const { syncStatus, lastSyncAt, triggerSync } = useSkillSync()
   useEffect(() => {
     getLocalSkills().then(setMySkills)
   }, [])
@@ -214,7 +217,7 @@ export function SkillsPage() {
       </div>
 
       {/* Tab toggle */}
-      <div className="mt-4 flex gap-4 border-b border-border/40">
+      <div className="mt-4 flex items-center gap-4 border-b border-border/40">
         <button
           onClick={() => setActiveTab('my-skills')}
           className={`cursor-pointer pb-2 text-sm transition-colors ${
@@ -235,6 +238,23 @@ export function SkillsPage() {
         >
           Marketplace
         </button>
+        {isAuthenticated && (
+          <button
+            onClick={triggerSync}
+            disabled={syncStatus === 'syncing'}
+            className="ml-auto flex cursor-pointer items-center gap-1.5 pb-2 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+            title={lastSyncAt ? `Last synced: ${new Date(lastSyncAt).toLocaleString()}` : 'Not yet synced'}
+          >
+            {syncStatus === 'syncing' ? (
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            ) : syncStatus === 'error' ? (
+              <CloudOff className="h-3.5 w-3.5 text-destructive" />
+            ) : (
+              <Cloud className="h-3.5 w-3.5" />
+            )}
+            {syncStatus === 'syncing' ? 'Syncing…' : syncStatus === 'error' ? 'Sync failed' : 'Sync'}
+          </button>
+        )}
       </div>
 
       <div className="relative mt-4 max-w-xl">
@@ -265,12 +285,6 @@ export function SkillsPage() {
           ))}
         </div>
       )}
-
-      <div className="mt-4 text-sm font-medium text-muted-foreground">
-        {activeTab === 'my-skills'
-          ? `My Skills (${filtered.length})`
-          : `${selectedCategory === 'All' ? 'All Skills' : selectedCategory} (${filtered.length})`}
-      </div>
 
       {activeTab === 'my-skills' && filtered.length === 0 ? (
         <div className="mt-8 flex flex-col items-center gap-3 text-sm text-muted-foreground">

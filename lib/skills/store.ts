@@ -1,5 +1,6 @@
 // lib/skills/store.ts
 import type { Skill, SkillExecution } from './types'
+import { markDirty, markDeleted } from '../sync/skillSync'
 
 const SKILLS_KEY = 'ocbot_skills'
 const EXECUTIONS_KEY = 'ocbot_skill_executions'
@@ -9,6 +10,8 @@ const MAX_AUTO_SKILLS = 50
 
 export class SkillStore {
   // === Internal storage access ===
+
+  private backfilled = false
 
   private async getAll(): Promise<Record<string, Skill>> {
     const result = await chrome.storage.local.get(SKILLS_KEY)
@@ -32,6 +35,10 @@ export class SkillStore {
 
   /** All skills sorted by updatedAt descending. */
   async list(): Promise<Skill[]> {
+    if (!this.backfilled) {
+      this.backfilled = true
+      await this.backfillTriggerPhrases()
+    }
     const all = await this.getAll()
     return Object.values(all).sort((a, b) => b.updatedAt - a.updatedAt)
   }
@@ -57,6 +64,7 @@ export class SkillStore {
 
     all[skill.id] = skill
     await this.setAll(all)
+    markDirty(skill.id).catch(() => {})
   }
 
   /** Delete a skill and its execution history. */
@@ -68,6 +76,7 @@ export class SkillStore {
     const execs = await this.getAllExecutions()
     delete execs[id]
     await this.setAllExecutions(execs)
+    markDeleted(id).catch(() => {})
   }
 
   /**
@@ -93,6 +102,7 @@ export class SkillStore {
 
     all[skill.id] = skill
     await this.setAll(all)
+    markDirty(skill.id).catch(() => {})
   }
 
   /** Filter skills by name or description (case-insensitive substring match). */
@@ -107,6 +117,34 @@ export class SkillStore {
           s.description.toLowerCase().includes(q),
       )
       .sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+
+  // === Backfill ===
+
+  /** Backfill triggerPhrases for existing user skills that lack them. */
+  async backfillTriggerPhrases(): Promise<number> {
+    const all = await this.getAll()
+    let count = 0
+    for (const skill of Object.values(all)) {
+      if (skill.source === 'auto') continue
+      if (skill.triggerPhrases?.length) continue
+
+      const words = new Set<string>()
+      skill.name.replace(/-/g, ' ').split(/\s+/)
+        .filter(w => w.length >= 3)
+        .forEach(w => words.add(w.toLowerCase()))
+      skill.description.split(/\s+/)
+        .filter(w => w.length >= 3).slice(0, 5)
+        .forEach(w => words.add(w.toLowerCase()))
+
+      skill.triggerPhrases = Array.from(words).slice(0, 5)
+      if (skill.triggerPhrases.length > 0) {
+        all[skill.id] = skill
+        count++
+      }
+    }
+    if (count > 0) await this.setAll(all)
+    return count
   }
 
   // === Execution history ===
