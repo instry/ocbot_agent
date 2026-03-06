@@ -1,23 +1,14 @@
 import type { PageElement } from './snapshot'
 
-export interface AlternativeSelector {
-  xpath: string
-  roleName: string
-  lastSuccessAt: number
-}
-
 export interface ActionStep {
-  method: 'click' | 'type' | 'select' | 'press'
-  backendNodeId: number
-  xpath?: string
+  method: 'click' | 'type' | 'fill' | 'press' | 'select' | 'hover'
+  xpath: string           // absolute XPath (persistent, cross-session)
+  encodedId: string       // "0-backendNodeId" (snapshot-scoped identifier)
+  backendNodeId: number   // current session node ID (for immediate execution)
   roleName: string
   args?: string[]
   description: string
-  alternativeSelectors?: AlternativeSelector[]
-  className?: string
-  testId?: string
-  /** Cached page-absolute click coordinates (recorded after successful execution) */
-  clickPoint?: { x: number; y: number }
+  twoStep?: boolean
 }
 
 export interface CachedAction {
@@ -67,45 +58,6 @@ export function buildRoleName(role: string, name: string): string {
   return `${role}:${name}`
 }
 
-/**
- * Find an element in the current snapshot by roleName fuzzy match.
- * Returns the matching element or null.
- */
-export function fuzzyMatchByRoleName(
-  roleName: string,
-  elements: PageElement[],
-): PageElement | null {
-  const [role, ...nameParts] = roleName.split(':')
-  const name = nameParts.join(':')
-
-  // Exact match first
-  const exact = elements.find(
-    (el) => el.role === role && el.name === name && el.interactable,
-  )
-  if (exact) return exact
-
-  // Case-insensitive name match with same role
-  const nameLower = name.toLowerCase()
-  const caseInsensitive = elements.find(
-    (el) =>
-      el.role === role &&
-      el.name.toLowerCase() === nameLower &&
-      el.interactable,
-  )
-  if (caseInsensitive) return caseInsensitive
-
-  // Partial name match (name contains or is contained)
-  const partial = elements.find(
-    (el) =>
-      el.role === role &&
-      el.interactable &&
-      (el.name.toLowerCase().includes(nameLower) ||
-        nameLower.includes(el.name.toLowerCase())) &&
-      el.name.length > 0,
-  )
-  return partial || null
-}
-
 export class ActCache {
   private async getAll(): Promise<Record<string, CachedAction>> {
     const result = await chrome.storage.local.get(STORAGE_KEY)
@@ -121,6 +73,8 @@ export class ActCache {
     const all = await this.getAll()
     const entry = all[key]
     if (!entry) return null
+    // Skip old entries without xpath (natural migration)
+    if (entry.actions.some(a => !a.xpath)) return null
     // Touch updatedAt for LRU
     entry.updatedAt = Date.now()
     all[key] = entry

@@ -1,5 +1,4 @@
 import { ensureAttached, sendCdp } from './cdp'
-import { logDebug } from '@/lib/debug/eventLog'
 
 export interface PageElement {
   encodedId: string
@@ -11,8 +10,6 @@ export interface PageElement {
   focused?: boolean
   value?: string
   description?: string
-  className?: string
-  testId?: string
 }
 
 export interface PageSnapshot {
@@ -20,6 +17,8 @@ export interface PageSnapshot {
   title: string
   elements: PageElement[]
   tree: string
+  /** encodedId → absolute XPath mapping for interactable elements */
+  xpathMap: Record<string, string>
 }
 
 interface AXNode {
@@ -33,6 +32,16 @@ interface AXNode {
   childIds?: string[]
   parentId?: string
   ignored?: boolean
+}
+
+interface DOMNode {
+  nodeId: number
+  backendNodeId: number
+  nodeType: number
+  nodeName: string
+  localName: string
+  attributes?: string[]
+  children?: DOMNode[]
 }
 
 const INTERACTABLE_ROLES = new Set([
@@ -81,12 +90,90 @@ function shouldIncludeNode(node: AXNode): boolean {
   return false
 }
 
+/** Encode backendNodeId with iframe prefix: "0-{backendNodeId}" */
+function encodeId(backendNodeId: number): string {
+  return `0-${backendNodeId}`
+}
+
 function formatNodeLine(el: PageElement): string {
-  let line = `[${el.backendNodeId}] ${el.role}: "${el.name}"`
+  let line = `[${el.encodedId}] ${el.role}: "${el.name}"`
   if (el.value !== undefined) line += ` value="${el.value}"`
   if (el.focused) line += ' (focused)'
   if (el.description) line += ` description="${el.description}"`
   return line
+}
+
+/**
+ * Build a backendNodeId → absolute XPath map by traversing the full DOM tree.
+ * Uses DOM.getDocument with depth=-1 to get the complete tree in one call.
+ */
+async function buildDomXPathMap(tabId: number): Promise<Map<number, string>> {
+  const map = new Map<number, string>()
+
+  try {
+    await sendCdp(tabId, 'DOM.enable')
+    const { root } = await sendCdp<{ root: DOMNode }>(tabId, 'DOM.getDocument', { depth: -1 })
+
+    function traverse(node: DOMNode, parentXPath: string): void {
+      let xpath = parentXPath
+
+      if (node.nodeType === 1 /* ELEMENT_NODE */) {
+        const tag = node.localName || node.nodeName.toLowerCase()
+        // Count same-tag siblings before this node for positional index
+        // We don't have sibling info directly, so we track via parent's children
+        xpath = `${parentXPath}/${tag}`
+      } else if (node.nodeType === 9 /* DOCUMENT_NODE */) {
+        xpath = ''
+      }
+
+      if (node.backendNodeId && node.nodeType === 1) {
+        map.set(node.backendNodeId, xpath || '/')
+      }
+
+      if (node.children) {
+        // Track sibling tag counts for positional XPath
+        const tagCounts = new Map<string, number>()
+        const tagTotals = new Map<string, number>()
+
+        // First pass: count total occurrences of each tag
+        for (const child of node.children) {
+          if (child.nodeType === 1) {
+            const tag = child.localName || child.nodeName.toLowerCase()
+            tagTotals.set(tag, (tagTotals.get(tag) || 0) + 1)
+          }
+        }
+
+        // Second pass: traverse with positional index
+        for (const child of node.children) {
+          if (child.nodeType === 1) {
+            const tag = child.localName || child.nodeName.toLowerCase()
+            const count = (tagCounts.get(tag) || 0) + 1
+            tagCounts.set(tag, count)
+            const total = tagTotals.get(tag) || 1
+            // Only add index if there are multiple siblings with same tag
+            const suffix = total > 1 ? `[${count}]` : ''
+            const childXPath = `${xpath}/${tag}${suffix}`
+
+            if (child.backendNodeId) {
+              map.set(child.backendNodeId, childXPath)
+            }
+
+            if (child.children) {
+              traverse(child, childXPath)
+            }
+          } else {
+            traverse(child, xpath)
+          }
+        }
+      }
+    }
+
+    traverse(root, '')
+  } catch (err) {
+    console.log('[ocbot:snapshot] buildDomXPathMap failed:', err instanceof Error ? err.message : err)
+  }
+
+  return map
 }
 
 export async function capturePageSnapshot(tabId: number): Promise<PageSnapshot> {
@@ -133,7 +220,7 @@ export async function capturePageSnapshot(tabId: number): Promise<PageSnapshot> 
     const description = node.description?.value
 
     const el: PageElement = {
-      encodedId: String(node.backendDOMNodeId),
+      encodedId: encodeId(node.backendDOMNodeId),
       backendNodeId: node.backendDOMNodeId,
       role,
       name,
@@ -153,38 +240,27 @@ export async function capturePageSnapshot(tabId: number): Promise<PageSnapshot> 
     if (elements.length >= 500) break
   }
 
-  // Enrich interactable elements with DOM attributes (className, data-testid)
-  // Best-effort, cap at 100 elements to limit performance impact
-  const interactableElements = elements.filter((el) => el.interactable).slice(0, 100)
-  logDebug('selector', 'Enriched elements', { count: interactableElements.length })
-  for (const el of interactableElements) {
-    try {
-      const { node } = await sendCdp<{
-        node: { attributes?: string[] }
-      }>(tabId, 'DOM.describeNode', { backendNodeId: el.backendNodeId })
-
-      if (node.attributes) {
-        for (let i = 0; i < node.attributes.length; i += 2) {
-          const attrName = node.attributes[i]
-          const attrValue = node.attributes[i + 1]
-          if (attrName === 'class') el.className = attrValue
-          if (attrName === 'data-testid') el.testId = attrValue
-        }
-      }
-    } catch {
-      // Best effort — skip on failure
-    }
-  }
-
   // Get page URL and title
   const { targetInfo } = await sendCdp<{
     targetInfo: { url: string; title: string }
   }>(tabId, 'Target.getTargetInfo')
+
+  // Build XPath map for interactable elements
+  const domXPathMap = await buildDomXPathMap(tabId)
+  const xpathMap: Record<string, string> = {}
+  for (const el of elements) {
+    if (!el.interactable) continue
+    const xpath = domXPathMap.get(el.backendNodeId)
+    if (xpath) {
+      xpathMap[el.encodedId] = xpath
+    }
+  }
 
   return {
     url: targetInfo.url,
     title: targetInfo.title,
     elements,
     tree: treeLines.join('\n'),
+    xpathMap,
   }
 }

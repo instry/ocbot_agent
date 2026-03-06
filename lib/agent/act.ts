@@ -1,8 +1,8 @@
 import type { LlmProvider } from '../llm/types'
-import type { ActCache, ActionStep, AlternativeSelector } from './cache'
-import { buildRoleName, fuzzyMatchByRoleName } from './cache'
+import type { ActCache, ActionStep } from './cache'
+import { buildRoleName } from './cache'
 import { capturePageSnapshot, type PageSnapshot } from './snapshot'
-import { inferActions } from './inference'
+import { inferActions, inferStepTwo } from './inference'
 import { ensureAttached, sendCdp } from './cdp'
 import { diffTrees } from './diff'
 import { logDebug } from '@/lib/debug/eventLog'
@@ -43,162 +43,6 @@ async function resolveNode(
     { backendNodeId },
   )
   return object.objectId
-}
-
-/**
- * Compute an absolute XPath for a DOM node identified by backendNodeId.
- * Returns null on any failure (node gone, detached, etc.).
- */
-async function resolveXPath(
-  tabId: number,
-  backendNodeId: number,
-): Promise<string | null> {
-  try {
-    const objectId = await resolveNode(tabId, backendNodeId)
-    const { result } = await sendCdp<{ result: { value: string } }>(
-      tabId,
-      'Runtime.callFunctionOn',
-      {
-        objectId,
-        functionDeclaration: `function() {
-          let el = this;
-          const parts = [];
-          while (el && el.nodeType === Node.ELEMENT_NODE) {
-            let idx = 1;
-            let sib = el.previousElementSibling;
-            while (sib) {
-              if (sib.tagName === el.tagName) idx++;
-              sib = sib.previousElementSibling;
-            }
-            parts.unshift(el.tagName.toLowerCase() + '[' + idx + ']');
-            el = el.parentElement;
-          }
-          return '/' + parts.join('/');
-        }`,
-        returnByValue: true,
-      },
-    )
-    await sendCdp(tabId, 'Runtime.releaseObject', { objectId })
-    return result.value || null
-  } catch {
-    return null
-  }
-}
-
-/**
- * Find a DOM element by XPath and return its backendNodeId.
- * Returns null if the XPath doesn't match any element.
- */
-export async function findByXPath(
-  tabId: number,
-  xpath: string,
-): Promise<number | null> {
-  try {
-    const { result } = await sendCdp<{ result: { objectId?: string } }>(
-      tabId,
-      'Runtime.evaluate',
-      {
-        expression: `document.evaluate(${JSON.stringify(xpath)}, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue`,
-        returnByValue: false,
-      },
-    )
-    if (!result.objectId) return null
-    const { node } = await sendCdp<{ node: { backendNodeId: number } }>(
-      tabId,
-      'DOM.describeNode',
-      { objectId: result.objectId },
-    )
-    await sendCdp(tabId, 'Runtime.releaseObject', { objectId: result.objectId })
-    return node.backendNodeId
-  } catch {
-    return null
-  }
-}
-
-/**
- * Enrich actions with XPath, DOM attributes, and click coordinates for stable cross-session selectors.
- */
-async function enrichWithXPath(
-  tabId: number,
-  actions: ActionStep[],
-  snapshot?: PageSnapshot,
-): Promise<ActionStep[]> {
-  const enriched: ActionStep[] = []
-  for (const action of actions) {
-    const xpath = await resolveXPath(tabId, action.backendNodeId)
-    let className = action.className
-    let testId = action.testId
-
-    // If snapshot available, copy DOM attributes from matching element
-    if (snapshot) {
-      const el = snapshot.elements.find((e) => e.backendNodeId === action.backendNodeId)
-      if (el) {
-        if (el.className) className = el.className
-        if (el.testId) testId = el.testId
-      }
-    }
-
-    // Record click coordinates for click actions
-    let clickPoint = action.clickPoint
-    if (action.method === 'click') {
-      try {
-        const objectId = await resolveNode(tabId, action.backendNodeId)
-        await scrollIntoView(tabId, objectId)
-        const pt = await getClickPoint(tabId, action.backendNodeId)
-        // Convert viewport coords to page-absolute coords
-        const scrollResult = await chrome.scripting.executeScript({
-          target: { tabId },
-          func: () => ({ scrollX: window.scrollX, scrollY: window.scrollY }),
-        })
-        const scroll = scrollResult[0]?.result ?? { scrollX: 0, scrollY: 0 }
-        clickPoint = { x: pt.x + scroll.scrollX, y: pt.y + scroll.scrollY }
-        await sendCdp(tabId, 'Runtime.releaseObject', { objectId })
-      } catch { /* best effort */ }
-    }
-
-    enriched.push({ ...action, xpath: xpath ?? undefined, className, testId, clickPoint })
-  }
-  return enriched
-}
-
-/**
- * Click at absolute page coordinates without needing a DOM node reference.
- * Scrolls the point into viewport first, then dispatches mouse events.
- */
-async function cdpClickAtPoint(tabId: number, x: number, y: number): Promise<void> {
-  // Scroll so the point is in viewport
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (px: number, py: number) => {
-      const vw = window.innerWidth
-      const vh = window.innerHeight
-      const sx = Math.max(0, px - vw / 2)
-      const sy = Math.max(0, py - vh / 2)
-      window.scrollTo(sx, sy)
-    },
-    args: [x, y],
-  })
-  // Small delay for scroll to settle
-  await new Promise((r) => setTimeout(r, 100))
-
-  // Get current scroll offset to convert page coords to viewport coords
-  const scrollResult = await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => ({ scrollX: window.scrollX, scrollY: window.scrollY }),
-  })
-  const scroll = scrollResult[0]?.result ?? { scrollX: 0, scrollY: 0 }
-  const vx = x - scroll.scrollX
-  const vy = y - scroll.scrollY
-
-  await sendCdp(tabId, 'Input.dispatchMouseEvent', {
-    type: 'mouseMoved', x: vx, y: vy,
-  })
-  await sendCdp(tabId, 'Input.dispatchMouseEvent', {
-    type: 'mousePressed', x: vx, y: vy, button: 'left', clickCount: 1,
-  })
-  await sendCdp(tabId, 'Input.dispatchMouseEvent', {
-    type: 'mouseReleased', x: vx, y: vy, button: 'left', clickCount: 1,
-  })
 }
 
 async function scrollIntoView(tabId: number, objectId: string): Promise<void> {
@@ -306,6 +150,64 @@ async function cdpPress(tabId: number, key: string): Promise<void> {
   })
 }
 
+// --- XPath resolution ---
+
+/**
+ * Resolve an XPath expression to a backendNodeId via Runtime.evaluate + DOM.describeNode.
+ * Returns null if the XPath doesn't match any element.
+ */
+async function findByXPath(tabId: number, xpath: string): Promise<number | null> {
+  try {
+    const { result } = await sendCdp<{
+      result: { objectId?: string; type: string; subtype?: string }
+    }>(tabId, 'Runtime.evaluate', {
+      expression: `document.evaluate(${JSON.stringify(xpath)}, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue`,
+      returnByValue: false,
+    })
+
+    if (!result.objectId || result.subtype === 'null') return null
+
+    const { node } = await sendCdp<{
+      node: { backendNodeId: number }
+    }>(tabId, 'DOM.describeNode', { objectId: result.objectId })
+
+    await sendCdp(tabId, 'Runtime.releaseObject', { objectId: result.objectId })
+    return node.backendNodeId
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Execute an action on an element found by XPath.
+ * First resolves XPath → backendNodeId, then delegates to the standard CDP methods.
+ */
+async function executeByXPath(
+  tabId: number,
+  xpath: string,
+  method: string,
+  args?: string[],
+): Promise<{ success: boolean; backendNodeId?: number; error?: string }> {
+  const backendNodeId = await findByXPath(tabId, xpath)
+  if (backendNodeId == null) {
+    return { success: false, error: `XPath not found: ${xpath}` }
+  }
+
+  const result = await executeAction(tabId, {
+    method: method as ActionStep['method'],
+    xpath,
+    encodedId: '',
+    backendNodeId,
+    roleName: '',
+    args,
+    description: '',
+  })
+
+  return { ...result, backendNodeId }
+}
+
+// --- Action execution ---
+
 async function executeAction(
   tabId: number,
   action: ActionStep,
@@ -313,29 +215,42 @@ async function executeAction(
   try {
     switch (action.method) {
       case 'click':
-        // Coordinate-based click when backendNodeId is sentinel -1
-        if (action.backendNodeId === -1 && action.clickPoint) {
-          await cdpClickAtPoint(tabId, action.clickPoint.x, action.clickPoint.y)
-          return { success: true }
-        }
+        console.log(`[ocbot:act] click #${action.backendNodeId} ${action.roleName}`)
         await cdpClick(tabId, action.backendNodeId)
         return { success: true }
       case 'type':
+      case 'fill':
+        console.log(`[ocbot:act] ${action.method} #${action.backendNodeId} "${action.args?.[0]}"`)
         await cdpType(tabId, action.backendNodeId, action.args?.[0] || '')
         return { success: true }
       case 'select':
+        console.log(`[ocbot:act] select #${action.backendNodeId} "${action.args?.[0]}"`)
         await cdpSelect(tabId, action.backendNodeId, action.args?.[0] || '')
         return { success: true }
       case 'press':
+        console.log(`[ocbot:act] press "${action.args?.[0] || 'Enter'}"`)
         await cdpPress(tabId, action.args?.[0] || 'Enter')
         return { success: true }
+      case 'hover': {
+        console.log(`[ocbot:act] hover #${action.backendNodeId} ${action.roleName}`)
+        const objectId = await resolveNode(tabId, action.backendNodeId)
+        await scrollIntoView(tabId, objectId)
+        const { x, y } = await getClickPoint(tabId, action.backendNodeId)
+        await sendCdp(tabId, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x, y })
+        await sendCdp(tabId, 'Runtime.releaseObject', { objectId })
+        return { success: true }
+      }
       default:
         return { success: false, error: `Unknown method: ${action.method}` }
     }
   } catch (err: unknown) {
-    return { success: false, error: err instanceof Error ? err.message : String(err) }
+    const msg = err instanceof Error ? err.message : String(err)
+    console.log(`[ocbot:act] ✗ ${action.method} ${action.roleName}: ${msg}`)
+    return { success: false, error: msg }
   }
 }
+
+// --- Replay ---
 
 async function replayActions(
   tabId: number,
@@ -379,126 +294,130 @@ async function replayActions(
 }
 
 /**
- * Try to self-heal cached actions by:
- * 1. XPath lookup (stable across page loads)
- * 2. testId matching (most stable DOM selector)
- * 3. Cached click coordinates (bypasses DOM entirely, click-only)
- * 4. Fuzzy roleName matching in current AXTree
- * 5. Alternative selectors (historically successful selectors)
- * Returns updated actions with new backendNodeIds, or null if matching fails.
+ * Replay cached actions via XPath resolution.
+ * For each action, resolve xpath → backendNodeId, then execute.
+ * Returns updated actions with fresh backendNodeIds, or null if any XPath fails.
  */
-async function selfHealFromSnapshot(
+async function replayCachedViaXPath(
   tabId: number,
-  cachedActions: ActionStep[],
-  snapshot: PageSnapshot,
-): Promise<ActionStep[] | null> {
-  const healed: ActionStep[] = []
-  for (const action of cachedActions) {
-    // Try xpath first (most stable)
-    if (action.xpath) {
-      const nodeId = await findByXPath(tabId, action.xpath)
-      if (nodeId) {
-        logDebug('selector', 'XPath match', { hit: true, xpath: action.xpath })
-        healed.push({ ...action, backendNodeId: nodeId })
-        continue
-      }
-      logDebug('selector', 'XPath match', { hit: false, xpath: action.xpath })
-    }
+  actions: ActionStep[],
+  verifyClicks?: boolean,
+): Promise<{ success: boolean; updatedActions: ActionStep[]; failedIndex: number; noEffect?: boolean }> {
+  const updated: ActionStep[] = []
 
-    // Try testId match (very stable)
-    if (action.testId) {
-      const match = snapshot.elements.find(
-        (el) => el.testId === action.testId && el.interactable,
-      )
-      if (match) {
-        logDebug('selector', 'testId match', { testId: action.testId })
-        healed.push({ ...action, backendNodeId: match.backendNodeId })
-        continue
-      }
-    }
+  for (let i = 0; i < actions.length; i++) {
+    const action = actions[i]
 
-    // Try cached click coordinates (click-only, bypasses DOM)
-    if (action.method === 'click' && action.clickPoint) {
-      logDebug('selector', 'clickPoint match', { x: action.clickPoint.x, y: action.clickPoint.y })
-      // Use a sentinel backendNodeId=-1 to signal coordinate-based click
-      healed.push({ ...action, backendNodeId: -1 })
+    // press doesn't need a node
+    if (action.method === 'press') {
+      updated.push(action)
+      const result = await executeAction(tabId, action)
+      if (!result.success) {
+        return { success: false, updatedActions: updated, failedIndex: i }
+      }
       continue
     }
 
-    // Fallback to roleName fuzzy match
-    const match = fuzzyMatchByRoleName(action.roleName, snapshot.elements)
-    if (match) {
-      healed.push({
-        ...action,
-        backendNodeId: match.backendNodeId,
-      })
-      continue
+    // Resolve XPath to fresh backendNodeId
+    const backendNodeId = await findByXPath(tabId, action.xpath)
+    if (backendNodeId == null) {
+      console.log(`[ocbot:act] XPath miss: ${action.xpath}`)
+      return { success: false, updatedActions: updated, failedIndex: i }
     }
 
-    // Try alternative selectors (LRU, cap at 5)
-    if (action.alternativeSelectors && action.alternativeSelectors.length > 0) {
-      logDebug('selector', 'Trying alternatives', { count: action.alternativeSelectors.length })
-      const alts = [...action.alternativeSelectors]
-        .sort((a, b) => b.lastSuccessAt - a.lastSuccessAt)
-        .slice(0, 5)
+    const freshAction: ActionStep = { ...action, backendNodeId }
+    updated.push(freshAction)
 
-      let found = false
-      for (const alt of alts) {
-        // Try xpath
-        if (alt.xpath) {
-          const nodeId = await findByXPath(tabId, alt.xpath)
-          if (nodeId) {
-            healed.push({ ...action, backendNodeId: nodeId })
-            found = true
-            break
-          }
-        }
-        // Try roleName
-        const altMatch = fuzzyMatchByRoleName(alt.roleName, snapshot.elements)
-        if (altMatch) {
-          healed.push({ ...action, backendNodeId: altMatch.backendNodeId })
-          found = true
-          break
-        }
-      }
-      if (found) continue
+    // Capture before snapshot for click verification
+    let beforeSnapshot: PageSnapshot | undefined
+    if (verifyClicks && action.method === 'click') {
+      try {
+        beforeSnapshot = await capturePageSnapshot(tabId)
+      } catch { /* best effort */ }
     }
 
+    const result = await executeAction(tabId, freshAction)
+    if (!result.success) {
+      return { success: false, updatedActions: updated, failedIndex: i }
+    }
+
+    // Verify click effect
+    if (beforeSnapshot && action.method === 'click') {
+      try {
+        await new Promise((r) => setTimeout(r, 200))
+        const afterSnapshot = await capturePageSnapshot(tabId)
+        const diff = diffTrees(beforeSnapshot, afterSnapshot)
+        if (!diff.changed && !diff.urlChanged) {
+          logDebug('diff', 'Click effect', { changed: false })
+          return { success: false, updatedActions: updated, failedIndex: i, noEffect: true }
+        }
+        logDebug('diff', 'Click effect', { changed: true })
+      } catch { /* best effort */ }
+    }
+  }
+
+  return { success: true, updatedActions: updated, failedIndex: -1 }
+}
+
+// --- Self-heal: Stagehand style (re-snapshot + re-LLM) ---
+
+async function selfHealRetry(
+  tabId: number,
+  instruction: string,
+  provider: LlmProvider,
+  signal?: AbortSignal,
+): Promise<{ actions: ActionStep[]; description: string } | null> {
+  try {
+    console.log('[ocbot:act] selfHealRetry: re-snapshot + re-LLM...')
+    const snapshot = await capturePageSnapshot(tabId)
+    if (signal?.aborted) return null
+    const result = await inferActions(instruction, snapshot, provider, signal)
+    return result
+  } catch (err) {
+    console.log('[ocbot:act] selfHealRetry failed:', err instanceof Error ? err.message : err)
     return null
   }
-  return healed
 }
 
-/**
- * After a successful self-heal, record the original (now-outdated) selector as an alternative.
- * This handles pages that alternate between layouts.
- */
-function recordAlternativeSelector(
-  originalAction: ActionStep,
-  healedAction: ActionStep,
-): ActionStep {
-  // If the selector didn't change, no need to record
-  if (originalAction.xpath === healedAction.xpath && originalAction.roleName === healedAction.roleName) {
-    return healedAction
+// --- Two-step execution ---
+
+async function executeTwoStep(
+  tabId: number,
+  firstAction: ActionStep,
+  provider: LlmProvider,
+  signal?: AbortSignal,
+): Promise<{ success: boolean; actions: ActionStep[] }> {
+  // Execute first step (e.g. open dropdown)
+  const firstResult = await executeAction(tabId, firstAction)
+  if (!firstResult.success) {
+    return { success: false, actions: [firstAction] }
   }
 
-  const alt: AlternativeSelector = {
-    xpath: originalAction.xpath || '',
-    roleName: originalAction.roleName,
-    lastSuccessAt: Date.now(),
+  // Wait for DOM to settle after opening
+  await new Promise((r) => setTimeout(r, 300))
+
+  // Re-snapshot and infer second step
+  const snapshot = await capturePageSnapshot(tabId)
+  if (signal?.aborted) return { success: false, actions: [firstAction] }
+
+  const stepTwo = await inferStepTwo(snapshot, firstAction.description, provider, signal)
+  if (!stepTwo.actions.length) {
+    return { success: false, actions: [firstAction] }
   }
 
-  const existing = healedAction.alternativeSelectors || []
-  // Avoid duplicates
-  const isDuplicate = existing.some(
-    (a) => a.xpath === alt.xpath && a.roleName === alt.roleName,
-  )
-  if (isDuplicate) return healedAction
+  // Execute second step
+  const allActions = [firstAction, ...stepTwo.actions]
+  for (const action of stepTwo.actions) {
+    const result = await executeAction(tabId, action)
+    if (!result.success) {
+      return { success: false, actions: allActions }
+    }
+  }
 
-  // Cap at 5 alternatives (LRU)
-  const updated = [alt, ...existing].slice(0, 5)
-  return { ...healedAction, alternativeSelectors: updated }
+  return { success: true, actions: allActions }
 }
+
+// --- Public API ---
 
 /**
  * Direct node execution — bypasses LLM inference entirely.
@@ -531,6 +450,8 @@ export async function actDirect(
 
   const action: ActionStep = {
     method: method as ActionStep['method'],
+    xpath: '',
+    encodedId: `0-${nodeId}`,
     backendNodeId: nodeId,
     roleName,
     args: value ? [value] : undefined,
@@ -562,71 +483,123 @@ export async function act(
   // 1. Check cache
   const cached = await cache.lookup(instruction, url)
   if (cached) {
-    console.log('[ocbot:act] cache hit, attempting self-heal...')
-    // Try self-heal via xpath + roleName match first (no LLM needed)
-    const snapshot = await capturePageSnapshot(tabId)
-    const healed = await selfHealFromSnapshot(tabId, cached.actions, snapshot)
+    console.log('[ocbot:act] cache hit, replaying via XPath...')
+    const replay = await replayCachedViaXPath(tabId, cached.actions, verifyClicks)
 
-    if (healed) {
-      const replay = await replayActions(tabId, healed, verifyClicks)
-      if (replay.success) {
-        console.log('[ocbot:act] ✅ self-heal success')
-        // Record alternative selectors for healed actions
-        const withAlts = healed.map((h, idx) => recordAlternativeSelector(cached.actions[idx], h))
-        const enriched = await enrichWithXPath(tabId, withAlts, snapshot)
-        await cache.update(instruction, url, enriched)
-        return {
-          success: true,
-          actions: enriched,
-          description: cached.description,
-          cacheHit: true,
-          selfHealed: healed !== cached.actions,
-        }
+    if (replay.success) {
+      console.log('[ocbot:act] ✓ XPath replay succeeded')
+      await cache.update(instruction, url, replay.updatedActions)
+      return {
+        success: true,
+        actions: replay.updatedActions,
+        description: cached.description,
+        cacheHit: true,
+        selfHealed: false,
       }
     }
 
-    // Self-heal failed — fall through to full LLM re-inference
-    logDebug('L1', 'Self-heal result', { success: false })
-    console.log('[ocbot:act] ❌ self-heal failed, re-inferring with LLM...')
+    // XPath replay failed → selfHealRetry (re-snapshot + re-LLM)
+    console.log('[ocbot:act] ✗ XPath replay failed, self-healing...')
     if (signal?.aborted) throw new Error('Aborted')
 
-    const freshSnapshot = healed ? await capturePageSnapshot(tabId) : snapshot
-    const inferred = await inferActions(instruction, freshSnapshot, provider, signal, tabId)
-    const healReplay = await replayActions(tabId, inferred.actions, verifyClicks)
+    const healed = await selfHealRetry(tabId, instruction, provider, signal)
+    if (!healed) {
+      return { success: false, actions: [], description: 'Self-heal failed', cacheHit: false, selfHealed: true }
+    }
 
+    const healReplay = await replayActions(tabId, healed.actions, verifyClicks)
     if (healReplay.success) {
-      const enriched = await enrichWithXPath(tabId, inferred.actions, freshSnapshot)
-      await cache.update(instruction, url, enriched)
+      await cache.update(instruction, url, healed.actions)
     }
 
     return {
       success: healReplay.success,
-      actions: inferred.actions,
-      description: inferred.description,
+      actions: healed.actions,
+      description: healed.description,
       cacheHit: false,
       selfHealed: true,
     }
   }
 
-  // 2. Cache miss: snapshot → infer → execute → store (with xpath)
-  console.log('[ocbot:act] cache miss, inferring with LLM...')
+  // 2. Cache miss — snapshot + LLM inference
+  console.log('[ocbot:act] cache miss, inferring...')
   const snapshot = await capturePageSnapshot(tabId)
   if (signal?.aborted) throw new Error('Aborted')
 
-  const inferred = await inferActions(instruction, snapshot, provider, signal, tabId)
-  console.log('[ocbot:act] inferred actions:', inferred.actions.map(a => `${a.method}(${a.roleName})`).join(', '))
-  const result = await replayActions(tabId, inferred.actions, verifyClicks)
-  console.log(`[ocbot:act] replay result: ${result.success ? '✅' : '❌'}`)
+  let inferResult: { actions: ActionStep[]; description: string }
+  try {
+    inferResult = await inferActions(instruction, snapshot, provider, signal)
+  } catch (err) {
+    console.log('[ocbot:act] inference failed:', err instanceof Error ? err.message : err)
+    return { success: false, actions: [], description: 'Inference failed', cacheHit: false, selfHealed: false }
+  }
 
-  if (result.success) {
-    const enriched = await enrichWithXPath(tabId, inferred.actions, snapshot)
-    await cache.store(instruction, url, enriched, inferred.description)
+  console.log('[ocbot:act] inferred:', inferResult.actions.map(a =>
+    `${a.method}(${a.roleName})`
+  ).join(', '))
+
+  // Empty actions = LLM couldn't find the target element
+  if (inferResult.actions.length === 0) {
+    console.log('[ocbot:act] ✗ LLM returned no actions (element not found)')
+    return {
+      success: false,
+      actions: [],
+      description: inferResult.description || 'No matching element found',
+      cacheHit: false,
+      selfHealed: false,
+    }
+  }
+
+  // 3. Execute actions (with twoStep support)
+  const allActions: ActionStep[] = []
+  let allSuccess = true
+
+  for (const action of inferResult.actions) {
+    if (signal?.aborted) throw new Error('Aborted')
+
+    if (action.twoStep) {
+      const twoStepResult = await executeTwoStep(tabId, action, provider, signal)
+      allActions.push(...twoStepResult.actions)
+      if (!twoStepResult.success) {
+        allSuccess = false
+        break
+      }
+    } else {
+      allActions.push(action)
+      const result = await executeAction(tabId, action)
+      if (!result.success) {
+        // Try selfHealRetry once
+        console.log('[ocbot:act] execution failed, trying self-heal...')
+        const healed = await selfHealRetry(tabId, instruction, provider, signal)
+        if (healed) {
+          const healReplay = await replayActions(tabId, healed.actions, verifyClicks)
+          if (healReplay.success) {
+            await cache.store(instruction, url, healed.actions, healed.description)
+            return {
+              success: true,
+              actions: healed.actions,
+              description: healed.description,
+              cacheHit: false,
+              selfHealed: true,
+            }
+          }
+        }
+        allSuccess = false
+        break
+      }
+    }
+  }
+
+  console.log(`[ocbot:act] result: ${allSuccess ? '✓' : '✗'}`)
+
+  if (allSuccess) {
+    await cache.store(instruction, url, allActions, inferResult.description)
   }
 
   return {
-    success: result.success,
-    actions: inferred.actions,
-    description: inferred.description,
+    success: allSuccess,
+    actions: allActions,
+    description: inferResult.description,
     cacheHit: false,
     selfHealed: false,
   }

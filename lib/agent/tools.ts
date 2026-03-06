@@ -18,8 +18,10 @@ export const BROWSER_TOOLS: ToolDefinition[] = [
       properties: {
         instruction: { type: 'string', description: 'Natural language description of the action (used when nodeId is not provided)' },
         nodeId: { type: 'number', description: 'Element nodeId from ariaTree for direct execution' },
-        method: { type: 'string', description: 'Action method', enum: ['click', 'type', 'select', 'press'] },
-        value: { type: 'string', description: 'Value for type/select/press actions' },
+        method: { type: 'string', description: 'Action method', enum: ['click', 'type', 'fill', 'select', 'press', 'hover'] },
+        value: { type: 'string', description: 'Value for type/fill/select/press actions' },
+        x: { type: 'number', description: 'X pixel coordinate for coordinate-based click (use after seeing a screenshot)' },
+        y: { type: 'number', description: 'Y pixel coordinate for coordinate-based click (use after seeing a screenshot)' },
       },
       required: [],
     },
@@ -218,6 +220,38 @@ export async function executeTool(
     const args = JSON.parse(argsJson || '{}')
     switch (name) {
       case 'act': {
+        // Coordinate-based click — direct pixel click, no DOM needed
+        if (args.x != null && args.y != null) {
+          const tabId = await getActiveTabId()
+          await ensureAttached(tabId)
+          const { data } = await sendCdp<{ data: string }>(tabId, 'Page.captureScreenshot', {
+            format: 'jpeg', quality: 70, optimizeForSpeed: true,
+          })
+          // Scroll and click at coordinates
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            func: (px: number, py: number) => {
+              const vw = window.innerWidth
+              const vh = window.innerHeight
+              const sx = Math.max(0, px - vw / 2)
+              const sy = Math.max(0, py - vh / 2)
+              window.scrollTo(sx, sy)
+            },
+            args: [args.x, args.y],
+          })
+          await new Promise((r) => setTimeout(r, 100))
+          const scrollResult = await chrome.scripting.executeScript({
+            target: { tabId },
+            func: () => ({ scrollX: window.scrollX, scrollY: window.scrollY }),
+          })
+          const scroll = scrollResult[0]?.result ?? { scrollX: 0, scrollY: 0 }
+          const vx = args.x - scroll.scrollX
+          const vy = args.y - scroll.scrollY
+          await sendCdp(tabId, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: vx, y: vy })
+          await sendCdp(tabId, 'Input.dispatchMouseEvent', { type: 'mousePressed', x: vx, y: vy, button: 'left', clickCount: 1 })
+          await sendCdp(tabId, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x: vx, y: vy, button: 'left', clickCount: 1 })
+          return JSON.stringify({ success: true, description: `click at (${args.x}, ${args.y})`, status: '(coordinate)' })
+        }
         if (args.nodeId != null && args.method) {
           // Direct execution — no LLM inference needed
           const result = await actDirect(args.nodeId, args.method, args.value, cache, signal)

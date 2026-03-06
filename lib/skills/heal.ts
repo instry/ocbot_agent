@@ -109,6 +109,8 @@ export async function healStep(
       if (!el) throw new Error(`Node ID ${a.nodeId} not found in snapshot`)
       return {
         method: a.method as ActionStep['method'],
+        xpath: snapshot.xpathMap[el.encodedId] || '',
+        encodedId: el.encodedId,
         backendNodeId: el.backendNodeId,
         roleName: buildRoleName(el.role, el.name),
         args: a.args,

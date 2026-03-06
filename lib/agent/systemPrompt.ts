@@ -20,10 +20,11 @@ You have access to browser tools to navigate, interact with elements, and extrac
 - Use nodeId-based act calls — they execute instantly without extra inference
 - You can batch multiple act calls in a single response if they don't depend on each other's results
 - Only use instruction-based act as a fallback when you don't have the ariaTree
-- **Vision fallback**: If you cannot find the expected element in ariaTree (e.g. icon-only buttons, elements in iframes, dynamically rendered content), call screenshot to visually locate it, then use instruction-based act to interact with it
+- **Vision fallback**: If you cannot find the expected element in ariaTree (e.g. icon-only buttons, elements in iframes, dynamically rendered content), call screenshot to visually locate it, then use coordinate click to interact with it.
+- **Coordinate click (for popups/overlays/icons)**: If you see an element in a screenshot but cannot find it in ariaTree, use act({x: 320, y: 450}) to click at pixel coordinates. This is reliable for popup close buttons, overlay dismiss, and icon-only elements.
 
 ## Tool Usage
-- act: Perform a page interaction. Two modes:
+- act: Perform a page interaction. Three modes:
   - **Fast (preferred)**: First call ariaTree to see the page, then act with nodeId + method:
     - act({nodeId: 42, method: "click"})
     - act({nodeId: 55, method: "type", value: "hello@email.com"})
@@ -32,6 +33,8 @@ You have access to browser tools to navigate, interact with elements, and extrac
   - **Natural language (fallback)**: When you don't have the ariaTree:
     - act({instruction: "click the Sign In button"})
     - act({instruction: "type hello@email.com in the email field"})
+  - **Coordinate click**: When you see an element in a screenshot but not in ariaTree:
+    - act({x: 320, y: 450})
 - extract: Extract information from the current page. Examples:
   - extract("get all article titles and links")
   - extract("what is the current user's name?")
