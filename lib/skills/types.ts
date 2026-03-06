@@ -87,4 +87,5 @@ export interface SkillMatch {
   skill: Skill
   confidence: 'strong' | 'weak'
   matchDepth: number                 // 0 = universal '*', higher = more specific
+  extractedParams?: Record<string, string>
 }

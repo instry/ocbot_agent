@@ -4,6 +4,7 @@ import type { Skill, SkillParameter } from '@/lib/skills/types'
 
 interface SkillParamFormProps {
   skill: Skill
+  prefill?: Record<string, string>
   onConfirm: (params: Record<string, string>) => void
   onCancel: () => void
 }
@@ -15,11 +16,11 @@ function defaultValue(param: SkillParameter): string {
   return ''
 }
 
-export function SkillParamForm({ skill, onConfirm, onCancel }: SkillParamFormProps) {
+export function SkillParamForm({ skill, prefill, onConfirm, onCancel }: SkillParamFormProps) {
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
     for (const p of skill.parameters) {
-      init[p.name] = defaultValue(p)
+      init[p.name] = prefill?.[p.name] ?? defaultValue(p)
     }
     return init
   })

@@ -21,7 +21,7 @@ export function App() {
     toolStatuses, error, sendMessage, runSkill, stopAgent, newChat,
     loadConversation, removeConversation,
     pendingSkillSave, saveAsSkill, dismissSkillSave,
-    pendingSkillParams, confirmSkillParams, cancelSkillParams,
+    pendingSkillParams, prefillParams, confirmSkillParams, cancelSkillParams,
   } = useChat(selectedProvider)
   const [channelStatuses, setChannelStatuses] = useState<Record<string, ChannelStatus>>({})
   const [skillSaving, setSkillSaving] = useState(false)
@@ -156,6 +156,7 @@ export function App() {
           {pendingSkillParams && (
             <SkillParamForm
               skill={pendingSkillParams}
+              prefill={prefillParams}
               onConfirm={confirmSkillParams}
               onCancel={cancelSkillParams}
             />

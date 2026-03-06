@@ -238,6 +238,7 @@ export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplac
   const [cloning, setCloning] = useState(false)
   const [cloneSuccess, setCloneSuccess] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [publishedId, setPublishedId] = useState<string | null>(skill.publishedId || null)
   const { isAuthenticated, user } = useAuth()
 
@@ -459,14 +460,32 @@ export function SkillDetailPage({ skill, onBack, backLabel = 'Back to Marketplac
                 {publishing ? 'Unpublishing…' : 'Unpublish'}
               </button>
             )}
-            {onDelete && (
+            {onDelete && !confirmingDelete && (
               <button
-                onClick={() => { onDelete(skill.id); onBack() }}
+                onClick={() => setConfirmingDelete(true)}
                 className="flex cursor-pointer items-center gap-2 rounded-xl border border-red-500/30 px-5 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-500/10"
               >
                 <Trash2 className="h-4 w-4" />
                 Delete
               </button>
+            )}
+            {onDelete && confirmingDelete && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-red-500">Delete this skill?</span>
+                <button
+                  onClick={() => { onDelete(skill.id); onBack() }}
+                  className="flex cursor-pointer items-center gap-2 rounded-xl bg-red-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Confirm
+                </button>
+                <button
+                  onClick={() => setConfirmingDelete(false)}
+                  className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/60 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/80"
+                >
+                  Cancel
+                </button>
+              </div>
             )}
           </div>
         </div>

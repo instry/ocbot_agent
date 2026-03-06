@@ -38,6 +38,7 @@ export function SkillEditPage({ skillId, onBack, onDeleted }: {
   const [executions, setExecutions] = useState<RealSkillExecution[]>([])
   const [fragility, setFragility] = useState<StepFragility[]>([])
   const [saved, setSaved] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   // Editable fields
   const [name, setName] = useState('')
@@ -333,13 +334,32 @@ export function SkillEditPage({ skillId, onBack, onDeleted }: {
             <Zap className="h-4 w-4" />
             Repair
           </button>
-          <button
-            onClick={handleDelete}
-            className="flex cursor-pointer items-center gap-2 rounded-xl border border-red-500/30 px-5 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-500/10"
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </button>
+          {!confirmingDelete ? (
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              className="flex cursor-pointer items-center gap-2 rounded-xl border border-red-500/30 px-5 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-500/10"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-red-500">Delete this skill?</span>
+              <button
+                onClick={handleDelete}
+                className="flex cursor-pointer items-center gap-2 rounded-xl bg-red-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600"
+              >
+                <Trash2 className="h-4 w-4" />
+                Confirm
+              </button>
+              <button
+                onClick={() => setConfirmingDelete(false)}
+                className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/60 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/80"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

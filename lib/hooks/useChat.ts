@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import type { ChatMessage, Conversation } from '@/lib/types'
 import type { LlmProvider, LlmRequestMessage } from '@/lib/llm/types'
 import type { AgentReplayStep } from '@/lib/agent/agentCache'
-import type { Skill } from '@/lib/skills/types'
+import type { Skill, SkillParameter } from '@/lib/skills/types'
 import { runAgentLoop } from '@/lib/agent/loop'
 import { ActCache } from '@/lib/agent/cache'
 import { createSkillFromExecution } from '@/lib/skills/create'
@@ -41,6 +41,8 @@ export function useChat(provider: LlmProvider | null) {
     startUrl: string
   } | null>(null)
   const [pendingSkillParams, setPendingSkillParams] = useState<Skill | null>(null)
+  const [prefillParams, setPrefillParams] = useState<Record<string, string>>({})
+  const paramResolveRef = useRef<((params: Record<string, string> | null) => void) | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   // Track the current conversation's title for saving
   const convMetaRef = useRef<{ title?: string }>({})
@@ -263,6 +265,14 @@ export function useChat(provider: LlmProvider | null) {
             } catch { /* proceed to show prompt on error */ }
             setPendingSkillSave({ steps, instruction, startUrl })
           },
+          onSkillMatch: async () => true,
+          onMissingParams: async (skill, extracted, _missing) => {
+            return new Promise<Record<string, string> | null>((resolve) => {
+              paramResolveRef.current = resolve
+              setPrefillParams(extracted)
+              setPendingSkillParams(skill)
+            })
+          },
         },
         abortController.signal,
         actCache,
@@ -385,11 +395,27 @@ export function useChat(provider: LlmProvider | null) {
     const skill = pendingSkillParams
     if (!skill) return
     setPendingSkillParams(null)
+    setPrefillParams({})
+
+    // If there's a pending resolve from onMissingParams, resolve it instead of executing directly
+    if (paramResolveRef.current) {
+      paramResolveRef.current(params)
+      paramResolveRef.current = null
+      return
+    }
+
     await executeSkill(skill, params)
   }, [pendingSkillParams, executeSkill])
 
   const cancelSkillParams = useCallback(() => {
     setPendingSkillParams(null)
+    setPrefillParams({})
+
+    // If there's a pending resolve from onMissingParams, cancel it
+    if (paramResolveRef.current) {
+      paramResolveRef.current(null)
+      paramResolveRef.current = null
+    }
   }, [])
 
   const stopAgent = useCallback(() => {
@@ -476,6 +502,7 @@ export function useChat(provider: LlmProvider | null) {
     saveAsSkill,
     dismissSkillSave,
     pendingSkillParams,
+    prefillParams,
     confirmSkillParams,
     cancelSkillParams,
   }

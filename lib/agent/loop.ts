@@ -15,7 +15,8 @@ import { matchSkill, matchAutoSkill } from '@/lib/skills/matcher'
 import { createAutoSkill } from '@/lib/skills/create'
 import { SkillStore } from '@/lib/skills/store'
 import { SkillRunner } from '@/lib/skills/runner'
-import type { SkillMatch } from '@/lib/skills/types'
+import type { Skill, SkillMatch, SkillParameter } from '@/lib/skills/types'
+import { extractSkillParams, getMissingParams } from '@/lib/skills/paramExtractor'
 
 const MAX_TURNS = 100
 
@@ -27,6 +28,11 @@ export interface AgentCallbacks {
   onToolMessage: (toolCallId: string, name: string, result: string) => void
   onError: (error: string) => void
   onSkillMatch?: (match: SkillMatch) => Promise<boolean> // return true to execute skill
+  onMissingParams?: (
+    skill: Skill,
+    extracted: Record<string, string>,
+    missing: SkillParameter[],
+  ) => Promise<Record<string, string> | null>  // null = cancel
   onRecordedSteps?: (steps: AgentReplayStep[], instruction: string, startUrl: string) => void
 }
 
@@ -111,37 +117,113 @@ export async function runAgentLoop(
       console.log(`${TAG} 🎯 Skill matched: "${skillMatch.skill.name}" (confidence: ${skillMatch.confidence})`)
       const shouldRun = await callbacks.onSkillMatch(skillMatch)
       if (shouldRun) {
-        const runner = new SkillRunner(skillStore)
-        const result = await runner.execute(
-          skillMatch.skill,
-          variables ?? {},
-          provider,
-          cache!,
-          {
-            onStepStart: (i, step) => callbacks.onToolCallStart(`skill-step-${i}`, step.type),
-            onStepEnd: (i, step, res) => callbacks.onToolCallEnd(`skill-step-${i}`, step.type, res),
-            onTrackSwitch: () => {},
-            onHeal: () => {},
-            onTextDelta: callbacks.onTextDelta,
-          },
-          signal,
-          variables,
-        )
+        const skill = skillMatch.skill
 
-        if (result.success) {
-          console.log(`${TAG} ✅ Skill completed (${result.track} track, ${result.durationMs}ms)`)
-          console.groupEnd()
-          callbacks.onTextDelta(
-            `Skill "${skillMatch.skill.name}" completed successfully (${result.track} track, ${result.durationMs}ms).`,
+        // --- Parameter extraction ---
+        let mergedParams: Record<string, string> = {}
+
+        if (skill.parameters.length > 0) {
+          // Build defaults
+          const defaults: Record<string, string> = {}
+          for (const p of skill.parameters) {
+            if (p.default != null) defaults[p.name] = String(p.default)
+          }
+
+          // LLM extraction
+          const extracted = await extractSkillParams(userInstruction, skill.parameters, provider, signal)
+          console.log(`${TAG} 📋 Extracted params:`, extracted)
+
+          // Check for missing required params
+          const missing = getMissingParams(skill.parameters, { ...defaults, ...extracted })
+
+          if (missing.length > 0) {
+            if (callbacks.onMissingParams) {
+              const userFilled = await callbacks.onMissingParams(skill, extracted, missing)
+              if (userFilled === null) {
+                // User cancelled — fall through to agent loop
+                console.log(`${TAG} ❌ User cancelled param input, falling back to agent loop`)
+              } else {
+                mergedParams = { ...defaults, ...extracted, ...userFilled }
+              }
+            } else {
+              // No callback to ask user — fall through to agent loop
+              console.log(`${TAG} ⚠ Missing params but no onMissingParams callback, falling back to agent loop`)
+            }
+          } else {
+            mergedParams = { ...defaults, ...extracted }
+          }
+
+          // If mergedParams is still empty and there were missing params, skip skill execution
+          if (missing.length > 0 && Object.keys(mergedParams).length === 0) {
+            // Fall through to normal agent loop
+          } else {
+            // Execute skill with params
+            const runner = new SkillRunner(skillStore)
+            const result = await runner.execute(
+              skill,
+              mergedParams,
+              provider,
+              cache!,
+              {
+                onStepStart: (i, step) => callbacks.onToolCallStart(`skill-step-${i}`, step.type),
+                onStepEnd: (i, step, res) => callbacks.onToolCallEnd(`skill-step-${i}`, step.type, res),
+                onTrackSwitch: () => {},
+                onHeal: () => {},
+                onTextDelta: callbacks.onTextDelta,
+              },
+              signal,
+              variables,
+            )
+
+            if (result.success) {
+              console.log(`${TAG} ✅ Skill completed (${result.track} track, ${result.durationMs}ms)`)
+              console.groupEnd()
+              callbacks.onTextDelta(
+                `Skill "${skill.name}" completed successfully (${result.track} track, ${result.durationMs}ms).`,
+              )
+              callbacks.onAssistantMessage(
+                `Skill "${skill.name}" completed successfully (${result.track} track, ${result.durationMs}ms).`,
+                [],
+              )
+              return
+            }
+            // Skill failed — fall through to normal agent loop
+            console.log(`${TAG} ❌ Skill execution failed, falling back to agent loop`)
+          }
+        } else {
+          // No parameters — execute directly
+          const runner = new SkillRunner(skillStore)
+          const result = await runner.execute(
+            skill,
+            variables ?? {},
+            provider,
+            cache!,
+            {
+              onStepStart: (i, step) => callbacks.onToolCallStart(`skill-step-${i}`, step.type),
+              onStepEnd: (i, step, res) => callbacks.onToolCallEnd(`skill-step-${i}`, step.type, res),
+              onTrackSwitch: () => {},
+              onHeal: () => {},
+              onTextDelta: callbacks.onTextDelta,
+            },
+            signal,
+            variables,
           )
-          callbacks.onAssistantMessage(
-            `Skill "${skillMatch.skill.name}" completed successfully (${result.track} track, ${result.durationMs}ms).`,
-            [],
-          )
-          return
+
+          if (result.success) {
+            console.log(`${TAG} ✅ Skill completed (${result.track} track, ${result.durationMs}ms)`)
+            console.groupEnd()
+            callbacks.onTextDelta(
+              `Skill "${skill.name}" completed successfully (${result.track} track, ${result.durationMs}ms).`,
+            )
+            callbacks.onAssistantMessage(
+              `Skill "${skill.name}" completed successfully (${result.track} track, ${result.durationMs}ms).`,
+              [],
+            )
+            return
+          }
+          // Skill failed — fall through to normal agent loop
+          console.log(`${TAG} ❌ Skill execution failed, falling back to agent loop`)
         }
-        // Skill failed — fall through to normal agent loop
-        console.log(`${TAG} ❌ Skill execution failed, falling back to agent loop`)
       }
     }
   }
