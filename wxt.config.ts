@@ -29,7 +29,8 @@ export default defineConfig({
       'storage',
       'activeTab',
       'scripting',
-      'debugger'
+      'debugger',
+      'identity'
     ],
     host_permissions: [
       '<all_urls>',
@@ -49,6 +50,11 @@ export default defineConfig({
     }
   },
   vite: () => ({
+    define: {
+      __OCBOT_SUPABASE_URL__: JSON.stringify(process.env.OCBOT_SUPABASE_URL || ''),
+      __OCBOT_SUPABASE_ANON_KEY__: JSON.stringify(process.env.OCBOT_SUPABASE_ANON_KEY || ''),
+      __OCBOT_API_URL__: JSON.stringify(process.env.OCBOT_API_URL || 'http://localhost:8080'),
+    },
     css: {
       postcss: {
         plugins: [tailwindcss(), require('autoprefixer')]

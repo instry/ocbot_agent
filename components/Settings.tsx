@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
-import { Sliders, Cpu, Plus, Trash2, Pencil, Star, ArrowLeft, ChevronDown, Sun, Moon, Monitor, Globe, Database } from 'lucide-react'
+import { Sliders, Cpu, Plus, Trash2, Pencil, Star, ArrowLeft, ChevronDown, Sun, Moon, Monitor, Globe, Database, User, LogOut, Mail, Laptop } from 'lucide-react'
 import type { LlmProvider } from '@/lib/llm/types'
 import { getTemplateByType } from '@/lib/llm/models'
 import type { ColorScheme, Language } from '@/lib/hooks/useSettings'
 import { ProviderForm } from './ProviderForm'
 import { SkillStore } from '@/lib/skills/store'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 // --- Types ---
 
-type SettingsTab = 'general' | 'providers' | 'data'
+type SettingsTab = 'general' | 'providers' | 'data' | 'account'
 type ProvidersView = 'list' | 'add' | 'edit'
 
 interface SettingsProps {
@@ -21,6 +22,14 @@ interface SettingsProps {
   language: Language
   onColorSchemeChange: (scheme: ColorScheme) => void
   onLanguageChange: (lang: Language) => void
+  // Auth props
+  user: SupabaseUser | null
+  isAuthenticated: boolean
+  authLoading: boolean
+  onSignInWithEmail: (email: string, password: string) => Promise<void>
+  onSignUpWithEmail: (email: string, password: string) => Promise<void>
+  onSignInWithGoogle: () => Promise<void>
+  onSignOut: () => Promise<void>
 }
 
 // --- Main Settings Component ---
@@ -28,6 +37,8 @@ interface SettingsProps {
 export function Settings({
   providers, selectedProvider, onSaveProvider, onDeleteProvider, onSelectProvider,
   colorScheme, language, onColorSchemeChange, onLanguageChange,
+  user, isAuthenticated, authLoading,
+  onSignInWithEmail, onSignUpWithEmail, onSignInWithGoogle, onSignOut,
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('providers')
   const [providersView, setProvidersView] = useState<ProvidersView>('list')
@@ -36,6 +47,7 @@ export function Settings({
   const tabs: { id: SettingsTab; label: string; icon: typeof Sliders }[] = [
     { id: 'providers', label: 'Models', icon: Cpu },
     { id: 'general', label: 'General', icon: Sliders },
+    { id: 'account', label: 'Account', icon: User },
     { id: 'data', label: 'Data', icon: Database },
   ]
 
@@ -88,6 +100,17 @@ export function Settings({
           />
         )}
         {activeTab === 'data' && <DataTab />}
+        {activeTab === 'account' && (
+          <AccountTab
+            user={user}
+            isAuthenticated={isAuthenticated}
+            loading={authLoading}
+            onSignInWithEmail={onSignInWithEmail}
+            onSignUpWithEmail={onSignUpWithEmail}
+            onSignInWithGoogle={onSignInWithGoogle}
+            onSignOut={onSignOut}
+          />
+        )}
       </div>
     </div>
   )
@@ -441,6 +464,189 @@ function DataTab() {
             </button>
           </SettingsRow>
         </SettingsSection>
+      </div>
+    </div>
+  )
+}
+
+// --- Account Tab ---
+
+function AccountTab({
+  user, isAuthenticated, loading,
+  onSignInWithEmail, onSignUpWithEmail, onSignInWithGoogle, onSignOut,
+}: {
+  user: SupabaseUser | null
+  isAuthenticated: boolean
+  loading: boolean
+  onSignInWithEmail: (email: string, password: string) => Promise<void>
+  onSignUpWithEmail: (email: string, password: string) => Promise<void>
+  onSignInWithGoogle: () => Promise<void>
+  onSignOut: () => Promise<void>
+}) {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [devices, setDevices] = useState<Array<{ id: string; device_name: string; last_seen: string }>>([])
+
+  // Load devices when authenticated
+  useEffect(() => {
+    if (!isAuthenticated) return
+    import('@/lib/auth/api').then(({ listDevices }) => {
+      listDevices()
+        .then(data => setDevices(data.devices || []))
+        .catch(() => {})
+    })
+  }, [isAuthenticated])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      if (mode === 'signin') {
+        await onSignInWithEmail(email, password)
+      } else {
+        await onSignUpWithEmail(email, password)
+      }
+      setEmail('')
+      setPassword('')
+    } catch (err: any) {
+      setError(err.message || 'An error occurred')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleGoogle = async () => {
+    setError(null)
+    try {
+      await onSignInWithGoogle()
+    } catch (err: any) {
+      setError(err.message || 'Google sign-in failed')
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full flex-col px-8 pb-10">
+      <div className="sticky top-0 z-10 bg-background pt-6 pb-6">
+        <h2 className="text-base font-semibold text-foreground">Account</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {isAuthenticated ? 'Manage your account and devices.' : 'Sign in to sync your data across devices.'}
+        </p>
+      </div>
+
+      <div className="flex max-w-[640px] flex-col gap-8">
+        {isAuthenticated && user ? (
+          <>
+            {/* User Info */}
+            <SettingsSection title="Profile">
+              <SettingsRow
+                title={user.email || 'User'}
+                description={`Signed in since ${new Date(user.created_at).toLocaleDateString()}`}
+              >
+                <button
+                  onClick={onSignOut}
+                  className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Sign Out
+                </button>
+              </SettingsRow>
+            </SettingsSection>
+
+            {/* Devices */}
+            <SettingsSection title="Devices">
+              {devices.length === 0 ? (
+                <p className="py-3.5 text-sm text-muted-foreground">No devices registered.</p>
+              ) : (
+                devices.map(d => (
+                  <SettingsRow
+                    key={d.id}
+                    title={d.device_name}
+                    description={`Last seen: ${new Date(d.last_seen).toLocaleString()}`}
+                  >
+                    <Laptop className="h-4 w-4 text-muted-foreground" />
+                  </SettingsRow>
+                ))
+              )}
+            </SettingsSection>
+          </>
+        ) : (
+          <>
+            {/* Auth Form */}
+            <SettingsSection title={mode === 'signin' ? 'Sign In' : 'Sign Up'}>
+              <form onSubmit={handleSubmit} className="flex flex-col gap-3 py-4">
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  className="rounded-lg border border-border/50 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  className="rounded-lg border border-border/50 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                />
+                {error && (
+                  <p className="text-xs text-destructive">{error}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                >
+                  <Mail className="h-4 w-4" />
+                  {submitting ? 'Please wait...' : mode === 'signin' ? 'Sign In' : 'Sign Up'}
+                </button>
+              </form>
+            </SettingsSection>
+
+            {/* Google OAuth */}
+            <SettingsSection title="Or continue with">
+              <div className="py-4">
+                <button
+                  onClick={handleGoogle}
+                  className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-border/50 bg-background py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/60"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                  Continue with Google
+                </button>
+              </div>
+            </SettingsSection>
+
+            {/* Toggle mode */}
+            <p className="text-center text-xs text-muted-foreground">
+              {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
+              <button
+                onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(null) }}
+                className="cursor-pointer text-primary hover:underline"
+              >
+                {mode === 'signin' ? 'Sign Up' : 'Sign In'}
+              </button>
+            </p>
+          </>
+        )}
       </div>
     </div>
   )

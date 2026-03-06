@@ -1,4 +1,5 @@
 import { initFromStorage, startChannel, stopChannel, getAllStatuses } from '../../lib/channels/manager'
+import { supabase } from '../../lib/auth/supabase'
 import type { ChannelConfig } from '../../lib/channels/types'
 
 export default defineBackground(() => {
@@ -8,6 +9,11 @@ export default defineBackground(() => {
   // Initialize channels from storage
   initFromStorage().catch(err => {
     console.error('[ocbot] Failed to init channels:', err)
+  })
+
+  // Restore auth session on service worker wake (ensures token refresh)
+  supabase.auth.getSession().catch(err => {
+    console.error('[ocbot] Failed to restore auth session:', err)
   })
 
   // Handle messages from sidepanel
