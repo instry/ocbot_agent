@@ -216,7 +216,9 @@ export function App() {
           )}
           {messages.length === 0 && !isLoading && (
             <div className="px-3 pb-2">
-              <SuggestionChips onSelect={(text) => chatInputRef.current?.setInput(text)} />
+              <SuggestionChips onSelect={(skill) => {
+                chrome.tabs.create({ url: chrome.runtime.getURL(`/home.html#/skills/detail?id=${skill.id}&source=marketplace`) })
+              }} />
             </div>
           )}
           <ChatInput

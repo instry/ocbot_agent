@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Search, ChevronLeft, ChevronRight, BadgeCheck, GitFork, Loader2 } from 'lucide-react'
-import { getSkillAbbr, getLocalSkills, getLocalSkillDetail, deleteLocalSkill, getMarketplaceSkills, type Skill } from '../data/skills'
+import { getSkillAbbr, getLocalSkills, getLocalSkillDetail, getMarketplaceSkillDetail, deleteLocalSkill, getMarketplaceSkills, type Skill } from '../data/skills'
 import { SkillDetailPage } from './SkillDetailPage'
 import { SkillEditPage } from './SkillEditPage'
 
@@ -137,13 +137,24 @@ export function SkillsPage() {
     const match = hash.match(/[?&]id=([^&]+)/)
     if (match) {
       const skillId = decodeURIComponent(match[1])
-      setActiveTab('my-skills')
-      getLocalSkillDetail(skillId).then((detail) => {
-        if (detail) {
-          setSelectedSkill(detail)
-          history.replaceState(null, '', `#/skills/detail?id=${skillId}`)
-        }
-      })
+      const isMarketplace = hash.includes('source=marketplace')
+      if (isMarketplace) {
+        setActiveTab('marketplace')
+        getMarketplaceSkillDetail(skillId).then((detail) => {
+          if (detail) {
+            setSelectedSkill(detail)
+            history.replaceState(null, '', `#/skills/detail?id=${skillId}&source=marketplace`)
+          }
+        })
+      } else {
+        setActiveTab('my-skills')
+        getLocalSkillDetail(skillId).then((detail) => {
+          if (detail) {
+            setSelectedSkill(detail)
+            history.replaceState(null, '', `#/skills/detail?id=${skillId}`)
+          }
+        })
+      }
     }
   }, [])
 

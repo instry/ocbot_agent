@@ -50,7 +50,9 @@ function NewSessionPage({
           onSaveProvider={saveProvider}
           onDeleteProvider={deleteProvider}
         />
-        <SuggestionChips onSelect={(text) => chatInputRef.current?.setInput(text)} />
+        <SuggestionChips onSelect={(skill) => {
+          window.location.hash = `#/skills/detail?id=${skill.id}&source=marketplace`
+        }} />
       </div>
     </div>
   )
