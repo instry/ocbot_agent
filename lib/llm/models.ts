@@ -107,6 +107,10 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     models: [
       { id: 'kimi-k2.5', name: 'Kimi K2.5', contextWindow: 262000 },
     ],
+    regions: [
+      { id: 'cn', label: 'China', baseUrl: 'https://api.moonshot.cn/v1', apiKeyUrl: 'https://platform.moonshot.cn/console/api-keys' },
+      { id: 'global', label: 'Global', baseUrl: 'https://api.moonshot.ai/v1', apiKeyUrl: 'https://platform.moonshot.ai/console/api-keys' },
+    ],
   },
   {
     type: 'arcee',
