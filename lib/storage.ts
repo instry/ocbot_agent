@@ -1,6 +1,7 @@
 import type { Conversation } from './types'
 import type { LlmProvider } from './llm/types'
 import type { ChannelConfig } from './channels/types'
+import { storage } from './storage-backend'
 
 const STORAGE_KEYS = {
   providers: 'ocbot_providers',
@@ -14,7 +15,7 @@ const MAX_INPUT_HISTORY = 100
 // --- Provider CRUD ---
 
 export async function getProviders(): Promise<LlmProvider[]> {
-  const result = await chrome.storage.local.get(STORAGE_KEYS.providers)
+  const result = await storage.get(STORAGE_KEYS.providers)
   return (result[STORAGE_KEYS.providers] as LlmProvider[]) || []
 }
 
@@ -26,13 +27,13 @@ export async function saveProvider(provider: LlmProvider): Promise<void> {
   } else {
     all.push(provider)
   }
-  await chrome.storage.local.set({ [STORAGE_KEYS.providers]: all })
+  await storage.set({ [STORAGE_KEYS.providers]: all })
 }
 
 export async function deleteProvider(id: string): Promise<void> {
   const all = await getProviders()
   const filtered = all.filter(p => p.id !== id)
-  await chrome.storage.local.set({ [STORAGE_KEYS.providers]: filtered })
+  await storage.set({ [STORAGE_KEYS.providers]: filtered })
 
   // If deleted provider was the default, clear it
   const defaultId = await getDefaultProviderId()
@@ -45,12 +46,12 @@ export async function deleteProvider(id: string): Promise<void> {
 // --- Default Provider ---
 
 export async function getDefaultProviderId(): Promise<string | null> {
-  const result = await chrome.storage.local.get(STORAGE_KEYS.defaultProviderId)
+  const result = await storage.get(STORAGE_KEYS.defaultProviderId)
   return (result[STORAGE_KEYS.defaultProviderId] as string) || null
 }
 
 export async function setDefaultProviderId(id: string | null): Promise<void> {
-  await chrome.storage.local.set({ [STORAGE_KEYS.defaultProviderId]: id ?? '' })
+  await storage.set({ [STORAGE_KEYS.defaultProviderId]: id ?? '' })
 }
 
 // --- Conversation persistence ---
@@ -58,7 +59,7 @@ export async function setDefaultProviderId(id: string | null): Promise<void> {
 const CONVERSATIONS_KEY = 'ocbot_conversations'
 
 export async function getConversations(): Promise<Conversation[]> {
-  const result = await chrome.storage.local.get(CONVERSATIONS_KEY)
+  const result = await storage.get(CONVERSATIONS_KEY)
   return (result[CONVERSATIONS_KEY] as Conversation[]) || []
 }
 
@@ -71,24 +72,24 @@ export async function saveConversation(conv: Conversation): Promise<void> {
     all.unshift(conv)
   }
   // Keep last 50 conversations
-  await chrome.storage.local.set({ [CONVERSATIONS_KEY]: all.slice(0, 50) })
+  await storage.set({ [CONVERSATIONS_KEY]: all.slice(0, 50) })
 }
 
 export async function deleteConversation(id: string): Promise<void> {
   const all = await getConversations()
   const filtered = all.filter(c => c.id !== id)
-  await chrome.storage.local.set({ [CONVERSATIONS_KEY]: filtered })
+  await storage.set({ [CONVERSATIONS_KEY]: filtered })
 }
 
 // --- Input History ---
 
 export async function getUserInputHistory(): Promise<string[]> {
-  const result = await chrome.storage.local.get(STORAGE_KEYS.inputHistory)
+  const result = await storage.get(STORAGE_KEYS.inputHistory)
   return (result[STORAGE_KEYS.inputHistory] as string[]) || []
 }
 
 export async function saveUserInputHistory(history: string[]): Promise<void> {
-  await chrome.storage.local.set({
+  await storage.set({
     [STORAGE_KEYS.inputHistory]: history.slice(-MAX_INPUT_HISTORY),
   })
 }
@@ -96,7 +97,7 @@ export async function saveUserInputHistory(history: string[]): Promise<void> {
 // --- Channel Config CRUD ---
 
 export async function getChannelConfigs(): Promise<ChannelConfig[]> {
-  const result = await chrome.storage.local.get(STORAGE_KEYS.channelConfigs)
+  const result = await storage.get(STORAGE_KEYS.channelConfigs)
   return (result[STORAGE_KEYS.channelConfigs] as ChannelConfig[]) || []
 }
 
@@ -108,11 +109,11 @@ export async function saveChannelConfig(config: ChannelConfig): Promise<void> {
   } else {
     all.push(config)
   }
-  await chrome.storage.local.set({ [STORAGE_KEYS.channelConfigs]: all })
+  await storage.set({ [STORAGE_KEYS.channelConfigs]: all })
 }
 
 export async function deleteChannelConfig(id: string): Promise<void> {
   const all = await getChannelConfigs()
   const filtered = all.filter(c => c.id !== id)
-  await chrome.storage.local.set({ [STORAGE_KEYS.channelConfigs]: filtered })
+  await storage.set({ [STORAGE_KEYS.channelConfigs]: filtered })
 }

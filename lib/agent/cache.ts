@@ -1,4 +1,5 @@
 import type { PageElement } from './snapshot'
+import { storage } from '../storage-backend'
 
 export interface ActionStep {
   method: 'click' | 'type' | 'fill' | 'press' | 'select' | 'hover'
@@ -60,12 +61,12 @@ export function buildRoleName(role: string, name: string): string {
 
 export class ActCache {
   private async getAll(): Promise<Record<string, CachedAction>> {
-    const result = await chrome.storage.local.get(STORAGE_KEY)
+    const result = await storage.get(STORAGE_KEY)
     return (result[STORAGE_KEY] as Record<string, CachedAction>) || {}
   }
 
   private async setAll(data: Record<string, CachedAction>): Promise<void> {
-    await chrome.storage.local.set({ [STORAGE_KEY]: data })
+    await storage.set({ [STORAGE_KEY]: data })
   }
 
   async lookup(instruction: string, url: string): Promise<CachedAction | null> {
@@ -124,6 +125,6 @@ export class ActCache {
   }
 
   async clear(): Promise<void> {
-    await chrome.storage.local.remove(STORAGE_KEY)
+    await storage.remove(STORAGE_KEY)
   }
 }

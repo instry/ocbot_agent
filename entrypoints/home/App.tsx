@@ -9,7 +9,6 @@ import { SkillsPage } from './pages/SkillsPage'
 import { AboutPage } from './pages/AboutPage'
 import { useLlmProvider } from '@/lib/llm/useLlmProvider'
 import { useSettings } from '@/lib/hooks/useSettings'
-import { useAuth } from '@/lib/hooks/useAuth'
 import type { LlmProvider } from '@/lib/llm/types'
 
 type Page = 'new-session' | 'skills' | 'claw' | 'settings' | 'about'
@@ -66,10 +65,6 @@ export function App() {
   })
   const { providers, selectedProvider, saveProvider, deleteProvider, selectProvider } = useLlmProvider()
   const { colorScheme, language, setColorScheme, setLanguage } = useSettings()
-  const {
-    user, isAuthenticated, loading: authLoading,
-    signInWithEmail, signUpWithEmail, signInWithGoogle, signOut,
-  } = useAuth()
 
   const navigateTo = useCallback((p: Page) => {
     setPage(p)
@@ -138,13 +133,6 @@ export function App() {
             language={language}
             onColorSchemeChange={setColorScheme}
             onLanguageChange={setLanguage}
-            user={user}
-            isAuthenticated={isAuthenticated}
-            authLoading={authLoading}
-            onSignInWithEmail={signInWithEmail}
-            onSignUpWithEmail={signUpWithEmail}
-            onSignInWithGoogle={signInWithGoogle}
-            onSignOut={signOut}
           />
         )}
         {page === 'about' && <AboutPage />}

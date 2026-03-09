@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { storage } from '../storage-backend'
 
 export type ColorScheme = 'system' | 'light' | 'dark'
 export type Language = 'en' | 'zh'
@@ -33,7 +34,7 @@ export function useSettings() {
 
   // Load from storage on mount
   useEffect(() => {
-    chrome.storage.local.get(STORAGE_KEY).then(result => {
+    storage.get(STORAGE_KEY).then(result => {
       const stored = result[STORAGE_KEY] as Partial<AppSettings> | undefined
       if (stored) {
         const merged = { ...DEFAULT_SETTINGS, ...stored }
@@ -56,21 +57,20 @@ export function useSettings() {
 
   // Listen for storage changes from other contexts
   useEffect(() => {
-    const listener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+    const unsubscribe = storage.onChanged((changes) => {
       if (changes[STORAGE_KEY]?.newValue) {
         const updated = { ...DEFAULT_SETTINGS, ...changes[STORAGE_KEY].newValue }
         setSettings(updated)
         applyColorScheme(updated.colorScheme)
       }
-    }
-    chrome.storage.local.onChanged.addListener(listener)
-    return () => chrome.storage.local.onChanged.removeListener(listener)
+    })
+    return unsubscribe
   }, [])
 
   const updateSettings = useCallback(async (patch: Partial<AppSettings>) => {
     const updated = { ...settings, ...patch }
     setSettings(updated)
-    await chrome.storage.local.set({ [STORAGE_KEY]: updated })
+    await storage.set({ [STORAGE_KEY]: updated })
     if (patch.colorScheme) {
       applyColorScheme(patch.colorScheme)
     }

@@ -1,10 +1,8 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { Search, ChevronLeft, ChevronRight, BadgeCheck, GitFork, Loader2, Cloud, CloudOff, RefreshCw } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, BadgeCheck, GitFork, Loader2 } from 'lucide-react'
 import { getSkillAbbr, getLocalSkills, getLocalSkillDetail, deleteLocalSkill, getMarketplaceSkills, type Skill } from '../data/skills'
 import { SkillDetailPage } from './SkillDetailPage'
 import { SkillEditPage } from './SkillEditPage'
-import { useAuth } from '@/lib/hooks/useAuth'
-import { useSkillSync } from '@/lib/hooks/useSkillSync'
 
 const CATEGORIES = [
   'All',
@@ -111,8 +109,6 @@ export function SkillsPage() {
   const [activeTab, setActiveTab] = useState<'marketplace' | 'my-skills'>('my-skills')
 
   const [mySkills, setMySkills] = useState<Skill[]>([])
-  const { isAuthenticated } = useAuth()
-  const { syncStatus, lastSyncAt, triggerSync } = useSkillSync()
 
   // Marketplace state
   const [marketplaceSkills, setMarketplaceSkills] = useState<Skill[]>([])
@@ -281,23 +277,6 @@ export function SkillsPage() {
         >
           Marketplace{marketplaceTotal > 0 ? ` (${marketplaceTotal})` : ''}
         </button>
-        {isAuthenticated && (
-          <button
-            onClick={triggerSync}
-            disabled={syncStatus === 'syncing'}
-            className="ml-auto flex cursor-pointer items-center gap-1.5 pb-2 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-            title={lastSyncAt ? `Last synced: ${new Date(lastSyncAt).toLocaleString()}` : 'Not yet synced'}
-          >
-            {syncStatus === 'syncing' ? (
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-            ) : syncStatus === 'error' ? (
-              <CloudOff className="h-3.5 w-3.5 text-destructive" />
-            ) : (
-              <Cloud className="h-3.5 w-3.5" />
-            )}
-            {syncStatus === 'syncing' ? 'Syncing…' : syncStatus === 'error' ? 'Sync failed' : 'Sync'}
-          </button>
-        )}
       </div>
 
       {(activeTab === 'marketplace' || mySkills.length > 0) && (

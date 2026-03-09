@@ -1,7 +1,7 @@
 // lib/skills/store.ts
 import type { Skill, SkillExecution } from './types'
-import { markDirty, markDeleted } from '../sync/skillSync'
 import { deriveUrlPattern, getUrlHierarchy, matchUrlPattern } from './urlPattern'
+import { storage } from '../storage-backend'
 
 const SKILLS_KEY = 'ocbot_skills'
 const EXECUTIONS_KEY = 'ocbot_skill_executions'
@@ -16,21 +16,21 @@ export class SkillStore {
   private urlPatternBackfilled = false
 
   private async getAll(): Promise<Record<string, Skill>> {
-    const result = await chrome.storage.local.get(SKILLS_KEY)
+    const result = await storage.get(SKILLS_KEY)
     return (result[SKILLS_KEY] as Record<string, Skill>) || {}
   }
 
   private async setAll(data: Record<string, Skill>): Promise<void> {
-    await chrome.storage.local.set({ [SKILLS_KEY]: data })
+    await storage.set({ [SKILLS_KEY]: data })
   }
 
   private async getAllExecutions(): Promise<Record<string, SkillExecution[]>> {
-    const result = await chrome.storage.local.get(EXECUTIONS_KEY)
+    const result = await storage.get(EXECUTIONS_KEY)
     return (result[EXECUTIONS_KEY] as Record<string, SkillExecution[]>) || {}
   }
 
   private async setAllExecutions(data: Record<string, SkillExecution[]>): Promise<void> {
-    await chrome.storage.local.set({ [EXECUTIONS_KEY]: data })
+    await storage.set({ [EXECUTIONS_KEY]: data })
   }
 
   // === Skill CRUD ===
@@ -70,7 +70,6 @@ export class SkillStore {
 
     all[skill.id] = skill
     await this.setAll(all)
-    markDirty(skill.id).catch(() => {})
   }
 
   /** Delete a skill and its execution history. */
@@ -82,7 +81,6 @@ export class SkillStore {
     const execs = await this.getAllExecutions()
     delete execs[id]
     await this.setAllExecutions(execs)
-    markDeleted(id).catch(() => {})
   }
 
   /**
@@ -108,7 +106,6 @@ export class SkillStore {
 
     all[skill.id] = skill
     await this.setAll(all)
-    markDirty(skill.id).catch(() => {})
   }
 
   /** Filter skills by name or description (case-insensitive substring match). */
