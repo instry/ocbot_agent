@@ -1,8 +1,12 @@
+<p align="center">
+  <img src="octopus.png" alt="ocbot logo" width="200"/>
+</p>
+
 # ocbot - AI Browser Assistant
 
 `ocbot_agent` is the core AI extension component of the ocbot project, running as a Chrome Extension. It provides an interactive interface via the Side Panel and leverages low-level browser APIs to achieve automation.
 
-This project is included as a **git submodule** in both [ocbot](https://github.com/instry/ocbot) and [ocbot_biz](https://github.com/instry/ocbot_biz). You typically don't need to clone it separately — use `git clone --recursive` on the parent project instead.
+This project is included as a **git submodule** in both [ocbot](https://github.com/instry/ocbot). You typically don't need to clone it separately — use `git clone --recursive` on the parent project instead.
 
 ## ✨ Key Features
 
@@ -73,3 +77,9 @@ This extension requests the following sensitive permissions to implement Agent f
 ## 🤝 Contributing
 
 Pull Requests and Issues are welcome to improve the ocbot agent.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
