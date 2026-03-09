@@ -162,6 +162,20 @@ export class SkillRunner {
       // Mark as hybrid since we attempted fast first
       agentResult.track = 'hybrid'
       agentResult.durationMs = Date.now() - startTime
+
+      // Evolve skill: merge fast-track completed steps + agent-track recorded steps
+      if (agentResult.success && agentResult.updatedSteps?.length) {
+        const executedSteps = result.executedSteps ?? []
+        const mergedSteps = [...executedSteps, ...agentResult.updatedSteps]
+        agentResult.updatedSteps = mergedSteps
+        await this.evolveSkill(skill, mergedSteps)
+        logDebug('evolution', 'Skill evolved from hybrid track', {
+          fastSteps: executedSteps.length,
+          agentSteps: agentResult.updatedSteps.length,
+          totalSteps: mergedSteps.length,
+        })
+      }
+
       await this.recordExecution(skill, parameters, agentResult)
       return agentResult
     }
@@ -170,6 +184,13 @@ export class SkillRunner {
     logDebug('execution', 'Track: agent')
     result = await this.runAgentTrack(skill, parameters, provider, cache, callbacks, signal, variables)
     result.durationMs = Date.now() - startTime
+
+    // Evolve skill: save agent-track recorded steps as the skill's first steps
+    if (result.success && result.updatedSteps?.length) {
+      await this.evolveSkill(skill, result.updatedSteps)
+      logDebug('evolution', 'Skill evolved from agent track', { steps: result.updatedSteps.length })
+    }
+
     await this.recordExecution(skill, parameters, result)
     return result
   }
@@ -350,6 +371,9 @@ export class SkillRunner {
       { role: 'user', content: prompt },
     ]
 
+    // Capture steps recorded by the agent loop for skill evolution
+    let recordedSteps: AgentReplayStep[] | undefined
+
     // Bridge SkillRunCallbacks to AgentCallbacks
     const agentCallbacks: AgentCallbacks = {
       onTextDelta: (text) => callbacks.onTextDelta(text),
@@ -358,6 +382,7 @@ export class SkillRunner {
       onAssistantMessage: (content, toolCalls) => callbacks.onAssistantMessage?.(content, toolCalls),
       onToolMessage: (toolCallId, name, result) => callbacks.onToolMessage?.(toolCallId, name, result),
       onError: () => { /* errors handled via result */ },
+      onRecordedSteps: (steps) => { recordedSteps = steps },
     }
 
     let success = true
@@ -374,6 +399,7 @@ export class SkillRunner {
       completedSteps: 0,
       totalSteps: 0,
       durationMs: Date.now() - startTime,
+      updatedSteps: recordedSteps,
     }
   }
 

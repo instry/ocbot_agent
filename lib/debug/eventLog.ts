@@ -1,7 +1,7 @@
 // lib/debug/eventLog.ts — Structured debug event logger for Phase 2 verification
 // Uses chrome.storage.session (fast, doesn't persist across browser restart)
 
-export type DebugCategory = 'L1' | 'L2' | 'L3' | 'diff' | 'selector' | 'execution' | 'fragility'
+export type DebugCategory = 'L1' | 'L2' | 'L3' | 'diff' | 'selector' | 'execution' | 'fragility' | 'evolution'
 
 export interface DebugEvent {
   id: number

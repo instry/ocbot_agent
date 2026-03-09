@@ -255,11 +255,7 @@ export function SkillsPage() {
           Skills
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Discover and clone skills. Or,{' '}
-          <span className="cursor-pointer font-medium text-primary underline underline-offset-2 transition-colors hover:text-primary/80">
-            create your own
-          </span>
-          .
+          Discover and clone skills. Complete a task in chat to save it as a skill.
         </p>
       </div>
 
